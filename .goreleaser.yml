@@ -1,0 +1,39 @@
+project_name: cli-tools
+
+release:
+  prerelease: auto
+  draft: true
+  name_template: "CLI Tools {{.Version}}"
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+
+- id: ebook-cli
+  goos: [windows, linux]
+  goarch: [386, amd64, arm64]
+  binary: ebook-cli
+  main: ./cmd/ebook
+
+- id: flashcard-cli
+  goos: [windows, linux]
+  goarch: [386, amd64, arm64]
+  binary: flashcard-cli
+  main: ./cmd/flashcard
+
+- id: scanbook-cli
+  goos: [windows, linux]
+  goarch: [386, amd64, arm64]
+  binary: scanbook-cli
+  main: ./cmd/scanbook
+
+archives:
+  - format: tar.gz
+    format_overrides:
+      - goos: windows
+        format: zip
+
+changelog:
+  sort: asc
