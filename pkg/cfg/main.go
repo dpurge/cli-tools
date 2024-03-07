@@ -18,6 +18,7 @@ func ReadConfig() {
 	viper.AddConfigPath(filepath.Join(homedir, ".config", "cli-tools"))
 	viper.SetConfigName("config")
 	viper.SetConfigType("yml")
+
 	err = viper.ReadInConfig()
 	if err != nil {
 		log.Fatal(err)
