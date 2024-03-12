@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/dpurge/cli-tools/pkg/cmd/ebook"
+	"github.com/dpurge/cli-tools/pkg/ebook"
 )
 
 func main() {

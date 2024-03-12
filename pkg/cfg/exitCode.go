@@ -1,4 +1,4 @@
-package cmd
+package cfg
 
 const (
 	ExitCodeOK = iota

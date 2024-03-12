@@ -2,15 +2,20 @@ package cfg
 
 import (
 	"fmt"
-	"log"
+	"os"
 
 	"github.com/spf13/viper"
 )
 
 func GetToolPath(application string, name string) (string, error) {
+	var err error
+
 	toolPath := viper.GetString(fmt.Sprintf("%s.%s", application, name))
 	if toolPath == "" {
-		log.Fatalf("Tool not found in the config file: %s.%s", application, name)
+		err = fmt.Errorf("tool not found in the config file: %s.%s", application, name)
+	} else {
+		_, err = os.Stat(toolPath)
 	}
-	return toolPath, nil
+
+	return toolPath, err
 }

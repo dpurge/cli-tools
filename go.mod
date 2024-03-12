@@ -3,8 +3,16 @@ module github.com/dpurge/cli-tools
 go 1.21
 
 require (
+	github.com/go-shiori/go-epub v1.2.1
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
+)
+
+require (
+	github.com/gabriel-vasile/mimetype v1.4.3 // indirect
+	github.com/gofrs/uuid/v5 v5.0.0 // indirect
+	github.com/vincent-petithory/dataurl v1.0.0 // indirect
+	golang.org/x/net v0.19.0 // indirect
 )
 
 require (
@@ -27,5 +35,5 @@ require (
 	golang.org/x/sys v0.15.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
+	gopkg.in/yaml.v3 v3.0.1
 )
