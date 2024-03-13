@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/dpurge/cli-tools/pkg/cfg"
+	"github.com/dpurge/cli-tools/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -14,7 +14,7 @@ var doctorCmd = &cobra.Command{
 	Short: "Doctor Cmd short description",
 	Long:  "Doctor Cmd long description",
 	Run: func(cmd *cobra.Command, args []string) {
-		magickConvert, err := cfg.GetToolPath("ImageMagick", "convert")
+		magickConvert, err := config.GetToolPath("ImageMagick", "convert")
 		if err == nil {
 			log.Println("ImageMagick convert: ", magickConvert)
 		} else if errors.Is(err, os.ErrNotExist) {

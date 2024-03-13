@@ -16,6 +16,8 @@ type EBookProject struct {
 	Author     string   `yaml:"author"`
 	Language   string   `yaml:"language"`
 	Stylesheet []string `yaml:"stylesheet"`
+	Font       []string `yaml:"font"`
+	Image      []string `yaml:"image"`
 	Text       []string `yaml:"text"`
 }
 

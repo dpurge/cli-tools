@@ -3,7 +3,7 @@ package ebook
 import (
 	"os"
 
-	"github.com/dpurge/cli-tools/pkg/cfg"
+	"github.com/dpurge/cli-tools/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -14,10 +14,10 @@ var mainCmd = &cobra.Command{
 }
 
 func Execute() {
-	cfg.ReadConfig()
+	config.ReadConfig()
 	err := mainCmd.Execute()
 	if err != nil {
-		os.Exit(cfg.ExitCodeError)
+		os.Exit(config.ExitCodeError)
 	}
 }
 

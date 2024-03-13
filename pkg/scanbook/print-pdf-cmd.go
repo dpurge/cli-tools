@@ -7,7 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/dpurge/cli-tools/pkg/cfg"
+	"github.com/dpurge/cli-tools/pkg/config"
 	"github.com/spf13/cobra"
 )
 
@@ -119,7 +119,7 @@ func getScannedPages(directory string, extension string) ([]string, error) {
 }
 
 func createBlankPage(size string) (string, error) {
-	magickConvert, err := cfg.GetToolPath("ImageMagick", "convert")
+	magickConvert, err := config.GetToolPath("ImageMagick", "convert")
 	if err != nil {
 		return "", err
 	}
@@ -173,7 +173,7 @@ func createPdf(name string, pages []string) (string, error) {
 		return "", err
 	}
 
-	magickConvert, err := cfg.GetToolPath("ImageMagick", "convert")
+	magickConvert, err := config.GetToolPath("ImageMagick", "convert")
 	if err != nil {
 		return "", err
 	}
