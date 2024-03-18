@@ -8,13 +8,11 @@ import (
 	"path/filepath"
 
 	"github.com/dpurge/cli-tools/pkg/config"
+	"github.com/dpurge/cli-tools/pkg/tool"
 	"github.com/spf13/cobra"
 )
 
-var name string
-var directory string
-var extension string
-var leadingBlank int
+var _blank int
 
 var printPdfCmd = &cobra.Command{
 	Use:   "print-pdf",
@@ -26,25 +24,25 @@ Default format for the scanned pages is PNG.
 
 Example 1:
 
-	print-pdf --name=my-book --directory=./my-book
+	print-pdf --input ./book-pages --output my-book
 	
 Example 2:
 
-	print-pdf --name=my-book --directory=./book-pages --extension=.png`,
+	print-pdf --input ./book-pages --output my-book --format png`,
 	Run: createPdfSignatures,
 }
 
 func init() {
 	mainCmd.AddCommand(printPdfCmd)
 
-	printPdfCmd.Flags().StringVarP(&name, "name", "n", "", "set book name")
-	printPdfCmd.MarkFlagRequired("name")
+	printPdfCmd.Flags().StringVarP(&_output, "output", "o", "", "output book name")
+	printPdfCmd.MarkFlagRequired("output")
 
-	printPdfCmd.Flags().StringVarP(&directory, "directory", "d", "", "set directory with scanned pages")
-	printPdfCmd.MarkFlagRequired("directory")
+	printPdfCmd.Flags().StringVarP(&_input, "input", "i", "", "input directory with scanned pages")
+	printPdfCmd.MarkFlagRequired("input")
 
-	printPdfCmd.Flags().StringVarP(&extension, "extension", "e", ".png", "set extension for scanned pages")
-	printPdfCmd.Flags().IntVarP(&leadingBlank, "leading-blank", "b", 0, "set number of leading blank pages")
+	printPdfCmd.Flags().StringVarP(&_format, "format", "f", "png", "format of scanned pages")
+	printPdfCmd.Flags().IntVarP(&_blank, "blank", "b", 0, "number of leading blank pages")
 }
 
 func createPdfSignatures(cmd *cobra.Command, args []string) {
@@ -53,12 +51,12 @@ func createPdfSignatures(cmd *cobra.Command, args []string) {
 		log.Fatal(err)
 	}
 
-	blanks := make([]string, leadingBlank)
-	for i := 0; i < leadingBlank; i++ {
+	blanks := make([]string, _blank)
+	for i := 0; i < _blank; i++ {
 		blanks[i] = blank
 	}
 
-	pages, err := getScannedPages(directory, extension)
+	pages, err := tool.GetScanPages(_input, fmt.Sprintf(".%s", _format))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -70,7 +68,7 @@ func createPdfSignatures(cmd *cobra.Command, args []string) {
 
 	signatureNr := 0
 	for i := 0; i < lenPages; i += lenSignature {
-		signature := make([]string, 0, lenSignature)
+		var signature []string
 		signatureNr += 1
 
 		j := i + lenSignature
@@ -82,7 +80,7 @@ func createPdfSignatures(cmd *cobra.Command, args []string) {
 			signature = append(signature, blank)
 		}
 
-		signatureName := fmt.Sprintf("%s-%02d", name, signatureNr)
+		signatureName := fmt.Sprintf("%s-%02d", _output, signatureNr)
 		signatureFile, err := createPdfSignature(signatureName, signature)
 		if err != nil {
 			log.Fatal(err)
@@ -95,27 +93,6 @@ func createPdfSignatures(cmd *cobra.Command, args []string) {
 	if err != nil {
 		fmt.Println(err)
 	}
-}
-
-func getScannedPages(directory string, extension string) ([]string, error) {
-	items, err := os.ReadDir(directory)
-	if err != nil {
-		return nil, err
-	}
-
-	pages := make([]string, 0, len(items))
-
-	for _, item := range items {
-		if !item.IsDir() && filepath.Ext(item.Name()) == extension {
-			fullname, err := filepath.Abs(filepath.Join(directory, item.Name()))
-			if err != nil {
-				return nil, err
-			}
-			pages = append(pages, fullname)
-		}
-	}
-
-	return pages, nil
 }
 
 func createBlankPage(size string) (string, error) {

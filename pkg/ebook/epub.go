@@ -1,6 +1,7 @@
 package ebook
 
 import (
+	"fmt"
 	"log"
 	"path/filepath"
 
@@ -52,11 +53,32 @@ func buildEPub(projectFile string) (string, error) {
 
 	// // Add a section
 	// section1Body := `<h1>Section 1</h1>
-	// <p>This is a paragraph.</p>`
+	// <p>This is a paragraph in section 1.</p>`
 	// _, err = book.AddSection(section1Body, "Section 1", "", "")
 	// if err != nil {
 	// 	log.Println(err)
 	// }
+
+	// Add a section. The CSS path is optional
+	section1Body := `    <h1>Section 1</h1>
+<p>This is a paragraph.</p>`
+	section1Path, err := book.AddSection(section1Body, "Section 1", "firstsection.xhtml", "")
+	if err != nil {
+		log.Println(err)
+	}
+
+	// Link to the first section
+	section2Body := fmt.Sprintf(`    <h1>Section 2</h1>
+	<a href="%s">Link to section 1</a>`,
+		section1Path)
+	// The title and filename are also optional
+	section2Path, err := book.AddSubSection(section1Path, section2Body, "Section 2", "secondsection.xhtml", "")
+	if err != nil {
+		log.Println(err)
+	}
+
+	fmt.Println(section1Path)
+	fmt.Println(section2Path)
 
 	// Write the EPUB
 	err = book.Write(project.Filename)

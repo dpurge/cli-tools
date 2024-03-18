@@ -14,6 +14,7 @@ var doctorCmd = &cobra.Command{
 	Short: "Doctor Cmd short description",
 	Long:  "Doctor Cmd long description",
 	Run: func(cmd *cobra.Command, args []string) {
+
 		magickConvert, err := config.GetToolPath("ImageMagick", "convert")
 		if err == nil {
 			log.Println("ImageMagick convert: ", magickConvert)
@@ -22,6 +23,16 @@ var doctorCmd = &cobra.Command{
 		} else {
 			log.Fatal(err)
 		}
+
+		ddjvu, err := config.GetToolPath("DjVuLibre", "ddjvu")
+		if err == nil {
+			log.Println("DjVuLibre ddjvu: ", ddjvu)
+		} else if errors.Is(err, os.ErrNotExist) {
+			log.Fatal("Missing DjVuLibre ddjvu: ", ddjvu, " (install: https://sourceforge.net/projects/djvu/files/)")
+		} else {
+			log.Fatal(err)
+		}
+
 	},
 }
 

@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var _input, _output, _format string
+
 var mainCmd = &cobra.Command{
 	Use:   "scanbook-cli",
 	Short: "ScanBook CLI short description",
