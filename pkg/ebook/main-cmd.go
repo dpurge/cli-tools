@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var _project string
+
 var mainCmd = &cobra.Command{
 	Use:   "ebook-cli",
 	Short: "EBook CLI short description",

@@ -22,7 +22,11 @@ Default format for the scanned pages is PNG.
 
 Example 1:
 
-	to-img --file=./my-book.djvu`,
+	export-page --input ./my-book.djvu
+
+Example 2:
+
+	export-page --input ./my-book.djvu --output ./book-pages --format tiff`,
 	Run: exportPage,
 }
 
@@ -69,6 +73,8 @@ func exportPage(cmd *cobra.Command, args []string) {
 	var pages []string
 
 	switch extension {
+	case ".pdf":
+		pages, err = exportPagePdf(filename, dirname)
 	case ".djvu":
 		pages, err = exportPageDjvu(filename, dirname)
 	default:
@@ -117,7 +123,7 @@ func exportPageDjvu(input string, output string) ([]string, error) {
 	return pages, nil
 }
 
-// func exportPagePdf(input string, output string) ([]string, error) {
-// 	var pages []string
-// 	return pages, nil
-// }
+func exportPagePdf(input string, output string) ([]string, error) {
+	var pages []string
+	return pages, nil
+}

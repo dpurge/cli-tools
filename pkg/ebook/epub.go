@@ -8,11 +8,11 @@ import (
 	"github.com/go-shiori/go-epub"
 )
 
-func buildEPub(projectFile string) (string, error) {
+func buildEPub(projectfile string) (string, error) {
 	// cd C:\jdp\src\local\ebook-example
 	//ebook-cli build-project -f .\ebook.yml
 
-	project, err := readProject(projectFile)
+	project, err := readProject(projectfile)
 	if err != nil {
 		return "", err
 	}
@@ -42,13 +42,14 @@ func buildEPub(projectFile string) (string, error) {
 	// }
 
 	for _, val := range project.Text {
-		_, basename := filepath.Split(val)
-		body := "Test"
-		title := "Test"
-		_, err := book.AddSection(body, title, basename, "")
-		if err != nil {
-			return "", err
-		}
+		// _, basename := filepath.Split(val)
+		// body := "Test"
+		// title := "Test"
+		// _, err := book.AddSection(body, title, basename, "")
+		// if err != nil {
+		// 	return "", err
+		// }
+		fmt.Println(val)
 	}
 
 	// // Add a section
@@ -60,17 +61,14 @@ func buildEPub(projectFile string) (string, error) {
 	// }
 
 	// Add a section. The CSS path is optional
-	section1Body := `    <h1>Section 1</h1>
-<p>This is a paragraph.</p>`
+	section1Body := `<h1>Section 1</h1><p>This is a paragraph.</p>`
 	section1Path, err := book.AddSection(section1Body, "Section 1", "firstsection.xhtml", "")
 	if err != nil {
 		log.Println(err)
 	}
 
 	// Link to the first section
-	section2Body := fmt.Sprintf(`    <h1>Section 2</h1>
-	<a href="%s">Link to section 1</a>`,
-		section1Path)
+	section2Body := fmt.Sprintf(`<h1>Section 2</h1><a href="%s">Link to section 1</a>`, section1Path)
 	// The title and filename are also optional
 	section2Path, err := book.AddSubSection(section1Path, section2Body, "Section 2", "secondsection.xhtml", "")
 	if err != nil {

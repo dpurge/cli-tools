@@ -10,15 +10,15 @@ import (
 )
 
 type EBookProject struct {
-	Identifier string   `yaml:"identifier"`
-	Filename   string   `yaml:"filename"`
-	Title      string   `yaml:"title"`
-	Author     string   `yaml:"author"`
-	Language   string   `yaml:"language"`
-	Stylesheet []string `yaml:"stylesheet"`
-	Font       []string `yaml:"font"`
-	Image      []string `yaml:"image"`
-	Text       []string `yaml:"text"`
+	Identifier string     `yaml:"identifier"`
+	Filename   string     `yaml:"filename"`
+	Title      string     `yaml:"title"`
+	Author     string     `yaml:"author,omitempty"`
+	Language   string     `yaml:"language,omitempty"`
+	Stylesheet []string   `yaml:"stylesheet,omitempty"`
+	Font       []string   `yaml:"font,omitempty"`
+	Image      []string   `yaml:"image,omitempty"`
+	Text       [][]string `yaml:"text,omitempty"`
 }
 
 func readProject(filename string) (*EBookProject, error) {
@@ -51,14 +51,14 @@ func readProject(filename string) (*EBookProject, error) {
 		}
 	}
 
-	for i, val := range project.Text {
-		project.Text[i] = filepath.Join(directory, val)
-		_, err = os.Stat(project.Text[i])
-		if errors.Is(err, os.ErrNotExist) {
-			err = fmt.Errorf("text not found: %s", project.Text[i])
-			return nil, err
-		}
-	}
+	// for i, val := range project.Text {
+	// 	project.Text[i] = filepath.Join(directory, val)
+	// 	_, err = os.Stat(project.Text[i])
+	// 	if errors.Is(err, os.ErrNotExist) {
+	// 		err = fmt.Errorf("text not found: %s", project.Text[i])
+	// 		return nil, err
+	// 	}
+	// }
 
 	return project, err
 }
