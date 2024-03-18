@@ -1,11 +1,11 @@
 package ebook
 
 import (
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	"github.com/dpurge/cli-tools/pkg/tool"
 	"gopkg.in/yaml.v3"
 )
 
@@ -40,25 +40,28 @@ func readProject(filename string) (*EBookProject, error) {
 	}
 
 	directory, _ := filepath.Split(filename)
-	project.Filename = filepath.Join(directory, project.Filename)
 
-	for i, val := range project.Stylesheet {
-		project.Stylesheet[i] = filepath.Join(directory, val)
-		_, err = os.Stat(project.Stylesheet[i])
-		if errors.Is(err, os.ErrNotExist) {
-			err = fmt.Errorf("stylesheet not found: %s", project.Stylesheet[i])
+	if project.Filename, err = filepath.Abs(filepath.Join(directory, project.Filename)); err != nil {
+		return nil, err
+	}
+
+	if err = tool.ResolvePaths(directory, project.Stylesheet, true); err != nil {
+		return nil, err
+	}
+
+	if err = tool.ResolvePaths(directory, project.Font, true); err != nil {
+		return nil, err
+	}
+
+	if err = tool.ResolvePaths(directory, project.Image, true); err != nil {
+		return nil, err
+	}
+
+	for _, val := range project.Text {
+		if err = tool.ResolvePaths(directory, val, true); err != nil {
 			return nil, err
 		}
 	}
-
-	// for i, val := range project.Text {
-	// 	project.Text[i] = filepath.Join(directory, val)
-	// 	_, err = os.Stat(project.Text[i])
-	// 	if errors.Is(err, os.ErrNotExist) {
-	// 		err = fmt.Errorf("text not found: %s", project.Text[i])
-	// 		return nil, err
-	// 	}
-	// }
 
 	return project, err
 }
