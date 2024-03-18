@@ -9,37 +9,34 @@ import (
 )
 
 func buildEPub(projectfile string) (string, error) {
-	// cd C:\jdp\src\local\ebook-example
-	//ebook-cli build-project -f .\ebook.yml
-
 	project, err := readProject(projectfile)
 	if err != nil {
 		return "", err
 	}
-	// fmt.Printf("%#v", proj)
+	// fmt.Printf("%#v", project)
 
-	// Create a new EPUB
 	book, err := epub.NewEpub(project.Title)
 	if err != nil {
 		return "", err
 	}
 
-	// Set the author
 	book.SetAuthor(project.Author)
 
-	for _, val := range project.Stylesheet {
-		_, basename := filepath.Split(val)
-		_, err := book.AddCSS(val, basename)
-		if err != nil {
-			return "", err
-		}
+	_, err = addStylesheets(book, project.Stylesheet)
+	if err != nil {
+		return "", err
+	}
+	// fmt.Println(stylesheets)
+
+	_, err = addFonts(book, project.Font)
+	if err != nil {
+		return "", err
 	}
 
-	// for i, val := range project.Font {
-	// }
-
-	// for i, val := range project.Image {
-	// }
+	_, err = addImages(book, project.Image)
+	if err != nil {
+		return "", err
+	}
 
 	for _, val := range project.Text {
 		// _, basename := filepath.Split(val)
@@ -86,3 +83,31 @@ func buildEPub(projectfile string) (string, error) {
 
 	return project.Filename, err
 }
+
+func addStylesheets(book *epub.Epub, stylesheets []string) ([]string, error) {
+	var styles = make([]string, 0, len(stylesheets))
+	for _, val := range stylesheets {
+		_, basename := filepath.Split(val)
+		style, err := book.AddCSS(val, basename)
+		if err != nil {
+			return nil, err
+		}
+		styles = append(styles, style)
+	}
+	return styles, nil
+}
+
+func addFonts(book *epub.Epub, fontfiles []string) ([]string, error) {
+	var fonts = make([]string, 0, len(fontfiles))
+	return fonts, nil
+}
+
+func addImages(book *epub.Epub, imagefiles []string) ([]string, error) {
+	var images = make([]string, 0, len(imagefiles))
+	return images, nil
+}
+
+// func addTexts(book *epub.Epub, textfiles []string) ([]string, error) {
+// 	var texts = make([]string, 0, len(textfiles))
+// 	return texts, nil
+// }
