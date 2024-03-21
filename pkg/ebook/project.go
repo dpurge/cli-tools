@@ -10,15 +10,20 @@ import (
 )
 
 type EBookProject struct {
-	Identifier string     `yaml:"identifier"`
-	Filename   string     `yaml:"filename"`
-	Title      string     `yaml:"title"`
-	Author     string     `yaml:"author,omitempty"`
-	Language   string     `yaml:"language,omitempty"`
-	Stylesheet []string   `yaml:"stylesheet,omitempty"`
-	Font       []string   `yaml:"font,omitempty"`
-	Image      []string   `yaml:"image,omitempty"`
-	Text       [][]string `yaml:"text,omitempty"`
+	Identifier string      `yaml:"identifier"`
+	Filename   string      `yaml:"filename"`
+	Title      string      `yaml:"title"`
+	Author     string      `yaml:"author,omitempty"`
+	Language   string      `yaml:"language,omitempty"`
+	Stylesheet EBookStyles `yaml:"stylesheet,omitempty"`
+	Font       []string    `yaml:"font,omitempty"`
+	Image      []string    `yaml:"image,omitempty"`
+	Text       [][]string  `yaml:"text,omitempty"`
+}
+
+type EBookStyles struct {
+	Section string `yaml:"section,omitempty"`
+	Chapter string `yaml:"chapter,omitempty"`
 }
 
 func readProject(filename string) (*EBookProject, error) {
@@ -45,7 +50,11 @@ func readProject(filename string) (*EBookProject, error) {
 		return nil, err
 	}
 
-	if err = tool.ResolvePaths(directory, project.Stylesheet, true); err != nil {
+	if project.Stylesheet.Section, err = tool.ResolvePath(directory, project.Stylesheet.Section, true); err != nil {
+		return nil, err
+	}
+
+	if project.Stylesheet.Chapter, err = tool.ResolvePath(directory, project.Stylesheet.Chapter, true); err != nil {
 		return nil, err
 	}
 

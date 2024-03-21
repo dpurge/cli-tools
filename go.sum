@@ -13,6 +13,8 @@ github.com/go-shiori/go-epub v1.2.1 h1:+K/WxrvmfFQY69cpryiObrT6X7WhkwpqhHY65AHs2
 github.com/go-shiori/go-epub v1.2.1/go.mod h1:3rCTODnigEgy2j3ksndClrGT9h/dcz3js9q4yPX7hf8=
 github.com/gofrs/uuid/v5 v5.0.0 h1:p544++a97kEL+svbcFbCQVM9KFu0Yo25UoISXGNNH9M=
 github.com/gofrs/uuid/v5 v5.0.0/go.mod h1:CDOjlDMVAtN56jqyRUZh58JT31Tiw7/oQyEXZV+9bD8=
+github.com/gomarkdown/markdown v0.0.0-20231222211730-1d6d20845b47 h1:k4Tw0nt6lwro3Uin8eqoET7MDA4JnT8YgbCjc/g5E3k=
+github.com/gomarkdown/markdown v0.0.0-20231222211730-1d6d20845b47/go.mod h1:JDGcbDT52eL4fju3sZ4TeHGsQwhG9nbDV21aMyhwPoA=
 github.com/google/go-cmp v0.5.9 h1:O2Tfq5qg4qc4AmwVlvv0oLiVAGB7enBSJ2x2DqQFi38=
 github.com/google/go-cmp v0.5.9/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/hashicorp/hcl v1.0.0 h1:0Anlzjpi4vEasTeNFn2mLJgTSwt0+6sfsiTG8qcWGx4=

@@ -2,9 +2,9 @@ package ebook
 
 import (
 	"fmt"
-	"log"
 	"path/filepath"
 
+	"github.com/dpurge/cli-tools/pkg/tool"
 	"github.com/go-shiori/go-epub"
 )
 
@@ -20,9 +20,13 @@ func buildEPub(projectfile string) (string, error) {
 		return "", err
 	}
 
+	book.SetIdentifier(project.Identifier)
 	book.SetAuthor(project.Author)
+	book.SetDescription("Sample description")
+	book.SetLang("en")
+	book.SetPpd("ltr")
 
-	_, err = addStylesheets(book, project.Stylesheet)
+	stylesheets, err := addStylesheets(book, project.Stylesheet)
 	if err != nil {
 		return "", err
 	}
@@ -38,76 +42,128 @@ func buildEPub(projectfile string) (string, error) {
 		return "", err
 	}
 
-	for _, val := range project.Text {
-		// _, basename := filepath.Split(val)
-		// body := "Test"
-		// title := "Test"
-		// _, err := book.AddSection(body, title, basename, "")
-		// if err != nil {
-		// 	return "", err
-		// }
-		fmt.Println(val)
-	}
-
-	// // Add a section
-	// section1Body := `<h1>Section 1</h1>
-	// <p>This is a paragraph in section 1.</p>`
-	// _, err = book.AddSection(section1Body, "Section 1", "", "")
-	// if err != nil {
-	// 	log.Println(err)
-	// }
-
-	// Add a section. The CSS path is optional
-	section1Body := `<h1>Section 1</h1><p>This is a paragraph.</p>`
-	section1Path, err := book.AddSection(section1Body, "Section 1", "firstsection.xhtml", "")
+	_, err = addTexts(book, project.Text, stylesheets)
 	if err != nil {
-		log.Println(err)
+		return "", err
 	}
 
-	// Link to the first section
-	section2Body := fmt.Sprintf(`<h1>Section 2</h1><a href="%s">Link to section 1</a>`, section1Path)
-	// The title and filename are also optional
-	section2Path, err := book.AddSubSection(section1Path, section2Body, "Section 2", "secondsection.xhtml", "")
-	if err != nil {
-		log.Println(err)
-	}
-
-	fmt.Println(section1Path)
-	fmt.Println(section2Path)
-
-	// Write the EPUB
 	err = book.Write(project.Filename)
 	if err != nil {
-		log.Fatal(err)
+		return "", err
 	}
 
-	return project.Filename, err
+	return project.Filename, nil
 }
 
-func addStylesheets(book *epub.Epub, stylesheets []string) ([]string, error) {
-	var styles = make([]string, 0, len(stylesheets))
-	for _, val := range stylesheets {
-		_, basename := filepath.Split(val)
-		style, err := book.AddCSS(val, basename)
+func addStylesheets(book *epub.Epub, stylesheets EBookStyles) (EBookStyles, error) {
+	var styles EBookStyles
+
+	if stylesheets.Section != "" {
+		style, err := book.AddCSS(stylesheets.Section, "section.css")
 		if err != nil {
-			return nil, err
+			return styles, err
 		}
-		styles = append(styles, style)
+		styles.Section = style
 	}
+
+	if stylesheets.Chapter != "" {
+		style, err := book.AddCSS(stylesheets.Chapter, "chapter.css")
+		if err != nil {
+			return styles, err
+		}
+		styles.Chapter = style
+	}
+
 	return styles, nil
 }
 
 func addFonts(book *epub.Epub, fontfiles []string) ([]string, error) {
 	var fonts = make([]string, 0, len(fontfiles))
+	for _, val := range fontfiles {
+		_, basename := filepath.Split(val)
+		font, err := book.AddFont(val, basename)
+		if err != nil {
+			return nil, err
+		}
+		fonts = append(fonts, font)
+	}
 	return fonts, nil
 }
 
 func addImages(book *epub.Epub, imagefiles []string) ([]string, error) {
 	var images = make([]string, 0, len(imagefiles))
+	for _, val := range imagefiles {
+		_, basename := filepath.Split(val)
+		image, err := book.AddImage(val, basename)
+		if err != nil {
+			return nil, err
+		}
+		images = append(images, image)
+	}
 	return images, nil
 }
 
-// func addTexts(book *epub.Epub, textfiles []string) ([]string, error) {
-// 	var texts = make([]string, 0, len(textfiles))
-// 	return texts, nil
-// }
+func addTexts(book *epub.Epub, textfiles [][]string, styles EBookStyles) ([]string, error) {
+	var texts = make([]string, 0, len(textfiles))
+	var sectionId = 0
+	var chapterId = 0
+	for _, items := range textfiles {
+		if len(items) > 0 {
+
+			sectionId++
+			section, err := addSection(book, items[0], styles.Section, sectionId)
+			if err != nil {
+				return nil, err
+			}
+			texts = append(texts, section)
+
+			for _, filename := range items[1:] {
+				chapterId++
+				chapter, err := addChapter(book, section, filename, styles.Chapter, chapterId)
+				if err != nil {
+					return nil, err
+				}
+				texts = append(texts, chapter)
+			}
+		}
+	}
+	return texts, nil
+}
+
+func addSection(book *epub.Epub, fileName string, stylesheet string, id int) (string, error) {
+	body, err := tool.MarkdownFileToHTML(fileName)
+	if err != nil {
+		return "", err
+	}
+
+	title, err := tool.GetHtmlTitle(body)
+	if err != nil {
+		return "", err
+	}
+
+	internalFile, err := book.AddSection(body, title, fmt.Sprintf("section%04d.xhtml", id), stylesheet)
+	if err != nil {
+		return "", err
+	}
+
+	return internalFile, nil
+}
+
+func addChapter(book *epub.Epub, section string, fileName string, stylesheet string, id int) (string, error) {
+	body, err := tool.MarkdownFileToHTML(fileName)
+	if err != nil {
+		return "", err
+	}
+
+	title, err := tool.GetHtmlTitle(body)
+	if err != nil {
+		return "", err
+	}
+
+	internalFile, err := book.AddSubSection(section, body, title, fmt.Sprintf("chapter%04d.xhtml", id), stylesheet)
+	if err != nil {
+		return "", err
+	}
+
+	return internalFile, nil
+}
