@@ -22,9 +22,12 @@ func buildEPub(projectfile string) (string, error) {
 
 	book.SetIdentifier(project.Identifier)
 	book.SetAuthor(project.Author)
-	book.SetDescription("Sample description")
-	book.SetLang("en")
-	book.SetPpd("ltr")
+	book.SetDescription(project.Description)
+
+	err = setLanguage(book, project.Language, project.Script)
+	if err != nil {
+		return "", err
+	}
 
 	stylesheets, err := addStylesheets(book, project.Stylesheet)
 	if err != nil {
@@ -42,6 +45,13 @@ func buildEPub(projectfile string) (string, error) {
 		return "", err
 	}
 
+	if project.Cover != "" {
+		_, err = setCover(book, project.Cover, stylesheets.Cover)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	_, err = addTexts(book, project.Text, stylesheets)
 	if err != nil {
 		return "", err
@@ -53,6 +63,28 @@ func buildEPub(projectfile string) (string, error) {
 	}
 
 	return project.Filename, nil
+}
+
+func setLanguage(book *epub.Epub, language string, script string) error {
+	book.SetLang("en")
+	book.SetPpd("ltr")
+
+	return nil
+}
+
+func setCover(book *epub.Epub, cover string, style string) (string, error) {
+	var err error
+	coverPath, _ := book.AddImage(cover, "cover.png")
+	if style == "" {
+		err = book.SetCover(coverPath, "")
+	} else {
+		err = book.SetCover(coverPath, style)
+	}
+
+	if err != nil {
+		return "", err
+	}
+	return coverPath, nil
 }
 
 func addStylesheets(book *epub.Epub, stylesheets EBookStyles) (EBookStyles, error) {

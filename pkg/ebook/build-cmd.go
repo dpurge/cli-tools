@@ -9,7 +9,7 @@ import (
 
 var buildCmd = &cobra.Command{
 	Use:   "build",
-	Short: "Build short description",
+	Short: "Build ebook project",
 	Long:  "Build long description",
 	Run: func(cmd *cobra.Command, args []string) {
 		epubFile, err := buildEPub(_project)
