@@ -102,8 +102,6 @@ type AnkiNote struct{}
 
 type AnkiCard struct{}
 
-// var db *sql.DB
-
 type PackageWriter struct {
 	filename  string
 	tempdir   string
@@ -146,7 +144,7 @@ func (writer *PackageWriter) Open(filename string) error {
 		return err
 	}
 
-	writer.archive, err = os.Create(filename)
+	writer.archive, err = os.Create(writer.filename)
 	if err != nil {
 		return err
 	}
@@ -168,7 +166,6 @@ func (writer *PackageWriter) Close() error {
 
 	writer.zipWriter.Close()
 	writer.archive.Close()
-
 	os.RemoveAll(writer.tempdir)
 
 	return nil
