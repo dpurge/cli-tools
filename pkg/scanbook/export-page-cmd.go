@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 
-	"github.com/dpurge/cli-tools/pkg/config"
 	"github.com/dpurge/cli-tools/pkg/tool"
 	"github.com/spf13/cobra"
 )
@@ -101,18 +99,12 @@ func exportPage(cmd *cobra.Command, args []string) {
 func exportPageDjvu(input string, output string) ([]string, error) {
 	var pages []string
 
-	ddjvu, err := config.GetToolPath("DjVuLibre", "ddjvu")
+	output, err := tool.RunCmd("DjVuLibre", "ddjvu", "-format=tiff", "-eachpage", input, filepath.Join(output, "page-%03d.tiff"))
 	if err != nil {
-		return pages, err
+		return nil, err
 	}
-
-	cmd := exec.Command(ddjvu, "-format=tiff", "-eachpage", input, filepath.Join(output, "page-%03d.tiff"))
-	buf, err := cmd.CombinedOutput()
-	if err != nil {
-		return pages, err
-	}
-	if len(buf) > 0 {
-		log.Println(string(buf[:]))
+	if len(output) > 0 {
+		log.Println(output)
 	}
 
 	pages, err = tool.GetScanPages(output, ".tiff")

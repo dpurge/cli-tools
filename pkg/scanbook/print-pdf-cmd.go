@@ -4,10 +4,8 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
 
-	"github.com/dpurge/cli-tools/pkg/config"
 	"github.com/dpurge/cli-tools/pkg/tool"
 	"github.com/spf13/cobra"
 )
@@ -46,7 +44,8 @@ func init() {
 }
 
 func createPdfSignatures(cmd *cobra.Command, args []string) {
-	blank, err := createBlankPage("420x595") // A5 at 72 DPI
+	// blank, err := createBlankPage("420x595") // A5 at 72 DPI
+	blank, err := createBlankPage("1748x2480") // A5 at 300 DPI
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -96,10 +95,6 @@ func createPdfSignatures(cmd *cobra.Command, args []string) {
 }
 
 func createBlankPage(size string) (string, error) {
-	magickConvert, err := config.GetToolPath("ImageMagick", "convert")
-	if err != nil {
-		return "", err
-	}
 
 	tmpFile, err := os.CreateTemp(".", "*.png")
 	if err != nil {
@@ -112,13 +107,12 @@ func createBlankPage(size string) (string, error) {
 		return "", err
 	}
 
-	cmd := exec.Command(magickConvert, "-size", size, "canvas:white", blank)
-	buf, err := cmd.CombinedOutput()
+	output, err := tool.RunCmd("ImageMagick", "convert", "-size", size, "canvas:white", blank)
 	if err != nil {
 		return "", err
 	}
-	if len(buf) > 0 {
-		log.Println(string(buf[:]))
+	if len(output) > 0 {
+		log.Println(output)
 	}
 
 	return blank, nil
@@ -150,18 +144,12 @@ func createPdf(name string, pages []string) (string, error) {
 		return "", err
 	}
 
-	magickConvert, err := config.GetToolPath("ImageMagick", "convert")
+	output, err := tool.RunCmd("ImageMagick", "convert", append(pages, filename)...)
 	if err != nil {
 		return "", err
 	}
-
-	cmd := exec.Command(magickConvert, append(pages, filename)...)
-	buf, err := cmd.CombinedOutput()
-	if err != nil {
-		return "", err
-	}
-	if len(buf) > 0 {
-		log.Println(string(buf[:]))
+	if len(output) > 0 {
+		log.Println(output)
 	}
 
 	return filename, nil

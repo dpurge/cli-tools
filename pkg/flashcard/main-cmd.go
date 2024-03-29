@@ -7,6 +7,8 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var _project string
+
 var mainCmd = &cobra.Command{
 	Use:   "flashcard-cli",
 	Short: "FlashCard CLI short description",

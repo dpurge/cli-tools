@@ -33,6 +33,24 @@ var doctorCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
+		k2pdfopt, err := config.GetToolPath("K2PdfOpt", "k2pdfopt")
+		if err == nil {
+			log.Println("K2PdfOpt command: ", k2pdfopt)
+		} else if errors.Is(err, os.ErrNotExist) {
+			log.Fatal("Missing K2PdfOpt command: ", k2pdfopt, " (install: https://www.willus.com/k2pdfopt/)")
+		} else {
+			log.Fatal(err)
+		}
+
+		pdftk, err := config.GetToolPath("PdfTkServer", "pdftk")
+		if err == nil {
+			log.Println("PdfTk command: ", pdftk)
+		} else if errors.Is(err, os.ErrNotExist) {
+			log.Fatal("Missing PdfTk command: ", pdftk, " (install: https://www.pdflabs.com/tools/pdftk-server/)")
+		} else {
+			log.Fatal(err)
+		}
+
 	},
 }
 

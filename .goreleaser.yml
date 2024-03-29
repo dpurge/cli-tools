@@ -5,6 +5,9 @@ release:
   draft: true
   name_template: "CLI Tools {{.Version}}"
 
+env:
+  - CGO_ENABLED=1
+
 before:
   hooks:
     - go mod tidy
@@ -12,20 +15,20 @@ before:
 builds:
 
 - id: ebook-cli
-  goos: [windows, linux]
-  goarch: [386, amd64, arm64]
+  goos: [windows]
+  goarch: [amd64]
   binary: ebook-cli
   main: ./cmd/ebook
 
 - id: flashcard-cli
-  goos: [windows, linux]
-  goarch: [386, amd64, arm64]
+  goos: [windows]
+  goarch: [amd64]
   binary: flashcard-cli
   main: ./cmd/flashcard
 
 - id: scanbook-cli
-  goos: [windows, linux]
-  goarch: [386, amd64, arm64]
+  goos: [windows]
+  goarch: [amd64]
   binary: scanbook-cli
   main: ./cmd/scanbook
 
