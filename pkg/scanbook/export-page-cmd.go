@@ -116,6 +116,26 @@ func exportPageDjvu(input string, output string) ([]string, error) {
 }
 
 func exportPagePdf(input string, output string) ([]string, error) {
-	var pages []string
-	return pages, nil
+	var files []string
+
+	pages, err := tool.GetPdfPages(input)
+	if err != nil {
+		return nil, err
+	}
+
+	files = make([]string, len(pages))
+
+	for i, p := range pages {
+		files[i] = filepath.Join(output, fmt.Sprintf("page-%03d", p.Number))
+		out, err := tool.RunCmd("Poppler", "pdftoppm", input, files[i], "-png", "-f", fmt.Sprint(p.Number), "-singlefile", "-r", "300")
+		if err != nil {
+			return nil, err
+		}
+		if len(out) > 0 {
+			log.Println(out)
+		}
+		// log.Println(files[i])
+	}
+
+	return files, nil
 }

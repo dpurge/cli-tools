@@ -51,6 +51,15 @@ var doctorCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
+		cpdf, err := config.GetToolPath("CPDF", "cpdf")
+		if err == nil {
+			log.Println("CPDF command: ", cpdf)
+		} else if errors.Is(err, os.ErrNotExist) {
+			log.Fatal("Missing CPDF command: ", cpdf, " (install: https://github.com/coherentgraphics/cpdf-binaries/releases/tag/v2.7)")
+		} else {
+			log.Fatal(err)
+		}
+
 	},
 }
 
