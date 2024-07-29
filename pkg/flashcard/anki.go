@@ -5,17 +5,18 @@ import (
 )
 
 func buildAnkiPackage(projectfile string) (string, error) {
+	var err error
+
 	project, err := readProject(projectfile)
 	if err != nil {
 		return "", err
 	}
 
-	pkg := new(tool.AnkiPackage)
-
-	pkgfile, err := pkg.Save(project.Filename)
+	apkg, err := tool.NewAnkiPackage()
 	if err != nil {
-		return "", nil
+		return "", err
 	}
+	defer apkg.Save(project.Filename)
 
-	return pkgfile, nil
+	return project.Filename, err
 }
