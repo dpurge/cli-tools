@@ -12,11 +12,13 @@ func buildAnkiPackage(projectfile string) (string, error) {
 		return "", err
 	}
 
-	apkg, err := tool.NewAnkiPackage()
+	apkg := tool.NewAnkiPackage()
+
+	err = apkg.Open(project.Filename)
 	if err != nil {
 		return "", err
 	}
-	defer apkg.Save(project.Filename)
+	defer apkg.Close()
 
-	return project.Filename, err
+	return project.Filename, nil
 }
