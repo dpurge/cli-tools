@@ -13,97 +13,6 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-const collection_schema string = `
-
-CREATE TABLE android_metadata (locale TEXT);
-
-
-
-CREATE TABLE config (
-  KEY text NOT NULL PRIMARY KEY,
-  usn integer NOT NULL,
-  mtime_secs integer NOT NULL,
-  val blob NOT NULL
-) without rowid;
-
-CREATE TABLE fields (
-  ntid integer NOT NULL,
-  ord integer NOT NULL,
-  name text NOT NULL COLLATE NOCASE,
-  config blob NOT NULL,
-  PRIMARY KEY (ntid, ord)
-) without rowid;
-
-CREATE TABLE templates (
-  ntid integer NOT NULL,
-  ord integer NOT NULL,
-  name text NOT NULL COLLATE NOCASE,
-  mtime_secs integer NOT NULL,
-  usn integer NOT NULL,
-  config blob NOT NULL,
-  PRIMARY KEY (ntid, ord)
-) without rowid;
-
-CREATE TABLE notetypes (
-  id integer NOT NULL PRIMARY KEY,
-  name text NOT NULL COLLATE NOCASE,
-  mtime_secs integer NOT NULL,
-  usn integer NOT NULL,
-  config blob NOT NULL
-);
-
-CREATE TABLE decks (
-  id integer PRIMARY KEY NOT NULL,
-  name text NOT NULL COLLATE NOCASE,
-  mtime_secs integer NOT NULL,
-  usn integer NOT NULL,
-  common blob NOT NULL,
-  kind blob NOT NULL
-);
-
-CREATE TABLE tags (
-  tag text NOT NULL PRIMARY KEY COLLATE NOCASE,
-  usn integer NOT NULL,
-  collapsed boolean NOT NULL,
-  config blob NULL
-) without rowid;
-
-CREATE TABLE graves (
-  oid integer NOT NULL,
-  type integer NOT NULL,
-  usn integer NOT NULL,
-  PRIMARY KEY (oid, type)
-) WITHOUT ROWID;
-
-CREATE INDEX ix_cards_nid on cards (nid);
-CREATE INDEX ix_cards_sched on cards (did, queue, due);
-CREATE INDEX ix_revlog_cid on revlog (cid);
-CREATE INDEX ix_notes_csum on notes (csum);
-CREATE UNIQUE INDEX idx_fields_name_ntid ON fields (name, ntid);
-CREATE UNIQUE INDEX idx_templates_name_ntid ON templates (name, ntid);
-CREATE INDEX idx_templates_usn ON templates (usn);
-CREATE UNIQUE INDEX idx_notetypes_name ON notetypes (name);
-CREATE INDEX idx_notetypes_usn ON notetypes (usn);
-CREATE UNIQUE INDEX idx_decks_name ON decks (name);
-CREATE INDEX idx_notes_mid ON notes (mid);
-CREATE INDEX idx_cards_odid ON cards (odid) WHERE odid != 0;
-CREATE INDEX idx_graves_pending ON graves (usn);
-`
-
-const media_schema string = `
-CREATE TABLE media (
-  fname text NOT NULL PRIMARY KEY,
-  csum text,
-  mtime int NOT NULL,
-  dirty int NOT NULL
-) without rowid;
-
-CREATE TABLE meta (dirMod int, lastUsn int);
-INSERT INTO meta VALUES(1698008361925,156);
-
-CREATE INDEX idx_media_dirty ON media (dirty) WHERE dirty = 1;
-`
-
 //  I N T E R F A C E S
 
 type AnkiDatabase interface {
@@ -135,6 +44,46 @@ type AnkiRevlog interface {
 }
 
 type AnkiDeckConfig interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiConfig interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiFields interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiTemplates interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiNoteTypes interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiDecks interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiTags interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiGraves interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiAndroidMetadata interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiMedia interface {
+	Init(AnkiDatabase) error
+}
+
+type AnkiMeta interface {
 	Init(AnkiDatabase) error
 }
 
@@ -188,6 +137,106 @@ type ankiDeckConfig struct {
 
 func (deckcfg *ankiDeckConfig) Init(db AnkiDatabase) error {
 	return db.CollectionExec(deckcfg.schema)
+}
+
+// ==================================================
+
+type ankiConfig struct {
+	schema string
+}
+
+func (cfg *ankiConfig) Init(db AnkiDatabase) error {
+	return db.CollectionExec(cfg.schema)
+}
+
+// ==================================================
+
+type ankiFields struct {
+	schema string
+}
+
+func (fields *ankiFields) Init(db AnkiDatabase) error {
+	return db.CollectionExec(fields.schema)
+}
+
+// ==================================================
+
+type ankiTemplates struct {
+	schema string
+}
+
+func (templates *ankiTemplates) Init(db AnkiDatabase) error {
+	return db.CollectionExec(templates.schema)
+}
+
+// ==================================================
+
+type ankiNoteTypes struct {
+	schema string
+}
+
+func (nt *ankiNoteTypes) Init(db AnkiDatabase) error {
+	return db.CollectionExec(nt.schema)
+}
+
+// ==================================================
+
+type ankiDecks struct {
+	schema string
+}
+
+func (decks *ankiDecks) Init(db AnkiDatabase) error {
+	return db.CollectionExec(decks.schema)
+}
+
+// ==================================================
+
+type ankiTags struct {
+	schema string
+}
+
+func (tags *ankiTags) Init(db AnkiDatabase) error {
+	return db.CollectionExec(tags.schema)
+}
+
+// ==================================================
+
+type ankiGraves struct {
+	schema string
+}
+
+func (graves *ankiGraves) Init(db AnkiDatabase) error {
+	return db.CollectionExec(graves.schema)
+}
+
+// ==================================================
+
+type ankiAndroidMetadata struct {
+	schema string
+}
+
+func (meta *ankiAndroidMetadata) Init(db AnkiDatabase) error {
+	return db.CollectionExec(meta.schema)
+}
+
+// ==================================================
+
+type ankiMedia struct {
+	schema string
+}
+
+func (media *ankiMedia) Init(db AnkiDatabase) error {
+	return db.MediaExec(media.schema)
+}
+
+// ==================================================
+
+type ankiMeta struct {
+	schema string
+}
+
+func (meta *ankiMeta) Init(db AnkiDatabase) error {
+	return db.MediaExec(meta.schema)
 }
 
 // ==================================================
@@ -252,15 +301,25 @@ func (db *ankiDatabase) MediaExec(sql string) error      { return dbexec(db.medi
 // ==================================================
 
 type ankiPackage struct {
-	filename   string
-	tempdir    string
-	isOpen     bool
-	database   AnkiDatabase
-	collection AnkiCollection
-	notes      AnkiNotes
-	cards      AnkiCards
-	revlog     AnkiRevlog
-	deckConfig AnkiDeckConfig
+	filename        string
+	tempdir         string
+	isOpen          bool
+	database        AnkiDatabase
+	collection      AnkiCollection
+	notes           AnkiNotes
+	cards           AnkiCards
+	revlog          AnkiRevlog
+	deckConfig      AnkiDeckConfig
+	config          AnkiConfig
+	fields          AnkiFields
+	templates       AnkiTemplates
+	noteTypes       AnkiNoteTypes
+	decks           AnkiDecks
+	tags            AnkiTags
+	graves          AnkiGraves
+	androidMetadata AnkiAndroidMetadata
+	media           AnkiMedia
+	meta            AnkiMeta
 }
 
 func (apkg *ankiPackage) Open(filename string) error {
@@ -337,6 +396,16 @@ func (apkg *ankiPackage) Open(filename string) error {
 		apkg.cards.Init(apkg.database)
 		apkg.revlog.Init(apkg.database)
 		apkg.deckConfig.Init(apkg.database)
+		apkg.config.Init(apkg.database)
+		apkg.fields.Init(apkg.database)
+		apkg.templates.Init(apkg.database)
+		apkg.noteTypes.Init(apkg.database)
+		apkg.decks.Init(apkg.database)
+		apkg.tags.Init(apkg.database)
+		apkg.graves.Init(apkg.database)
+		apkg.androidMetadata.Init(apkg.database)
+		apkg.media.Init(apkg.database)
+		apkg.meta.Init(apkg.database)
 	}
 
 	apkg.isOpen = true
@@ -454,7 +523,10 @@ func NewAnkiNotes() AnkiNotes {
         flags           integer not null,      /* 9 */
         data            text not null          /* 10 */
     );
+
     CREATE INDEX ix_notes_usn on notes (usn);
+	CREATE INDEX ix_notes_csum on notes (csum);
+	CREATE INDEX idx_notes_mid ON notes (mid);
   `
 
 	return notes
@@ -484,14 +556,18 @@ func NewAnkiCards() AnkiCards {
       flags           integer not null,      /* 16 */
       data            text not null          /* 17 */
     );
+
     CREATE INDEX ix_cards_usn on cards (usn);
+	CREATE INDEX ix_cards_nid on cards (nid);
+	CREATE INDEX ix_cards_sched on cards (did, queue, due);
+	CREATE INDEX idx_cards_odid ON cards (odid) WHERE odid != 0;
   `
 
 	return cards
 }
 
 func NewAnkiRevlog() AnkiRevlog {
-	revlog := new(ankiCards)
+	revlog := new(ankiRevlog)
 
 	revlog.schema = `
     CREATE TABLE revlog (
@@ -506,6 +582,7 @@ func NewAnkiRevlog() AnkiRevlog {
       type            integer not null
     );
     CREATE INDEX ix_revlog_usn on revlog (usn);
+	CREATE INDEX ix_revlog_cid on revlog (cid);
   `
 
 	return revlog
@@ -515,16 +592,184 @@ func NewAnkiDeckConfig() AnkiDeckConfig {
 	deckcfg := new(ankiDeckConfig)
 
 	deckcfg.schema = `
-    CREATE TABLE deck_config (
-      id integer PRIMARY KEY NOT NULL,
-      name text NOT NULL COLLATE NOCASE,
-      mtime_secs integer NOT NULL,
-      usn integer NOT NULL,
-      config blob NOT NULL
-    );
-  `
+		CREATE TABLE deck_config (
+		id integer PRIMARY KEY NOT NULL,
+		name text NOT NULL COLLATE NOCASE,
+		mtime_secs integer NOT NULL,
+		usn integer NOT NULL,
+		config blob NOT NULL
+		);
+  	`
 
 	return deckcfg
+}
+
+func NewAnkiConfig() AnkiConfig {
+	cfg := new(ankiConfig)
+
+	cfg.schema = `
+		CREATE TABLE config (
+		KEY text NOT NULL PRIMARY KEY,
+		usn integer NOT NULL,
+		mtime_secs integer NOT NULL,
+		val blob NOT NULL
+		) without rowid;
+  	`
+
+	return cfg
+}
+
+func NewAnkiFields() AnkiFields {
+	fields := new(ankiFields)
+
+	fields.schema = `
+		CREATE TABLE fields (
+		ntid integer NOT NULL,
+		ord integer NOT NULL,
+		name text NOT NULL COLLATE NOCASE,
+		config blob NOT NULL,
+		PRIMARY KEY (ntid, ord)
+		) without rowid;
+
+		CREATE UNIQUE INDEX idx_fields_name_ntid ON fields (name, ntid);
+  	`
+
+	return fields
+}
+
+func NewAnkiTemplates() AnkiTemplates {
+	tpl := new(ankiTemplates)
+
+	tpl.schema = `
+		CREATE TABLE templates (
+		ntid integer NOT NULL,
+		ord integer NOT NULL,
+		name text NOT NULL COLLATE NOCASE,
+		mtime_secs integer NOT NULL,
+		usn integer NOT NULL,
+		config blob NOT NULL,
+		PRIMARY KEY (ntid, ord)
+		) without rowid;
+
+		CREATE UNIQUE INDEX idx_templates_name_ntid ON templates (name, ntid);
+		CREATE INDEX idx_templates_usn ON templates (usn);
+  	`
+
+	return tpl
+}
+
+func NewAnkiNoteTypes() AnkiNoteTypes {
+	nt := new(ankiNoteTypes)
+
+	nt.schema = `
+		CREATE TABLE notetypes (
+		id integer NOT NULL PRIMARY KEY,
+		name text NOT NULL COLLATE NOCASE,
+		mtime_secs integer NOT NULL,
+		usn integer NOT NULL,
+		config blob NOT NULL
+		);
+
+		CREATE UNIQUE INDEX idx_notetypes_name ON notetypes (name);
+		CREATE INDEX idx_notetypes_usn ON notetypes (usn);
+  	`
+
+	return nt
+}
+
+func NewAnkiDecks() AnkiDecks {
+	decks := new(ankiDecks)
+
+	decks.schema = `
+		CREATE TABLE decks (
+		id integer PRIMARY KEY NOT NULL,
+		name text NOT NULL COLLATE NOCASE,
+		mtime_secs integer NOT NULL,
+		usn integer NOT NULL,
+		common blob NOT NULL,
+		kind blob NOT NULL
+		);
+
+		CREATE UNIQUE INDEX idx_decks_name ON decks (name);
+  	`
+
+	return decks
+}
+
+func NewAnkiTags() AnkiTags {
+	tags := new(ankiTags)
+
+	tags.schema = `
+		CREATE TABLE tags (
+		tag text NOT NULL PRIMARY KEY COLLATE NOCASE,
+		usn integer NOT NULL,
+		collapsed boolean NOT NULL,
+		config blob NULL
+		) without rowid;
+  	`
+
+	return tags
+}
+
+func NewAnkiGraves() AnkiGraves {
+	graves := new(ankiGraves)
+
+	graves.schema = `
+		CREATE TABLE graves (
+		oid integer NOT NULL,
+		type integer NOT NULL,
+		usn integer NOT NULL,
+		PRIMARY KEY (oid, type)
+		) WITHOUT ROWID;
+
+		CREATE INDEX idx_graves_pending ON graves (usn);
+  	`
+
+	return graves
+}
+
+func NewAnkiAndroidMetadata() AnkiAndroidMetadata {
+	meta := new(ankiAndroidMetadata)
+
+	meta.schema = `
+	CREATE TABLE android_metadata (
+	locale TEXT
+	);
+  	`
+
+	return meta
+}
+
+func NewAnkiMedia() AnkiMedia {
+	media := new(ankiMedia)
+
+	media.schema = `
+		CREATE TABLE media (
+		fname text NOT NULL PRIMARY KEY,
+		csum text,
+		mtime int NOT NULL,
+		dirty int NOT NULL
+		) without rowid;
+
+		CREATE INDEX idx_media_dirty ON media (dirty) WHERE dirty = 1;
+  	`
+
+	return media
+}
+
+func NewAnkiMeta() AnkiMeta {
+	meta := new(ankiMeta)
+
+	meta.schema = `
+		CREATE TABLE meta (
+		dirMod int,
+		lastUsn int
+		);
+
+		INSERT INTO meta VALUES(1698008361925,156);
+  	`
+
+	return meta
 }
 
 func NewAnkiDatabase() AnkiDatabase {
@@ -540,5 +785,15 @@ func NewAnkiPackage() AnkiPackage {
 	apkg.cards = NewAnkiCards()
 	apkg.revlog = NewAnkiRevlog()
 	apkg.deckConfig = NewAnkiDeckConfig()
+	apkg.config = NewAnkiConfig()
+	apkg.fields = NewAnkiFields()
+	apkg.templates = NewAnkiTemplates()
+	apkg.noteTypes = NewAnkiNoteTypes()
+	apkg.decks = NewAnkiDecks()
+	apkg.tags = NewAnkiTags()
+	apkg.graves = NewAnkiGraves()
+	apkg.androidMetadata = NewAnkiAndroidMetadata()
+	apkg.media = NewAnkiMedia()
+	apkg.meta = NewAnkiMeta()
 	return apkg
 }
