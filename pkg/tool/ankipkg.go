@@ -3,14 +3,18 @@ package tool
 import (
 	"archive/zip"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
+	"github.com/dpurge/cli-tools/pkg/tool/proto/anki"
 	_ "github.com/mattn/go-sqlite3"
+	"google.golang.org/protobuf/proto"
 )
 
 //  I N T E R F A C E S
@@ -25,10 +29,12 @@ type AnkiDatabase interface {
 type AnkiPackage interface {
 	Open(string) error
 	Close() error
+	LoadProject(*FlashcardProject) error
 }
 
 type AnkiCollection interface {
-	Init(AnkiDatabase) error
+	Init(db AnkiDatabase) error
+	Add(db AnkiDatabase) (int64, error)
 }
 
 type AnkiNotes interface {
@@ -56,11 +62,13 @@ type AnkiFields interface {
 }
 
 type AnkiTemplates interface {
-	Init(AnkiDatabase) error
+	Init(db AnkiDatabase) error
+	Add(db AnkiDatabase, ntid int64, ord int, name string, config []byte) error
 }
 
 type AnkiNoteTypes interface {
-	Init(AnkiDatabase) error
+	Init(db AnkiDatabase) error
+	Add(db AnkiDatabase, id int64, name string, config []byte) (int64, error)
 }
 
 type AnkiDecks interface {
@@ -93,10 +101,37 @@ type AnkiMeta interface {
 
 type ankiCollection struct {
 	schema string
+	add    string
 }
 
 func (col *ankiCollection) Init(db AnkiDatabase) error {
-	return db.CollectionExec(col.schema)
+	var err error
+
+	err = db.CollectionExec(col.schema)
+	if err != nil {
+		return err
+	}
+
+	_, err = col.Add(db)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (col *ankiCollection) Add(db AnkiDatabase) (int64, error) {
+	var err error
+	var id int64 = 1
+
+	now := time.Now()
+
+	err = db.CollectionExec(fmt.Sprintf(col.add, id, now.Unix(), now.UnixMilli(), now.UnixMilli()))
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
 }
 
 // ==================================================
@@ -163,20 +198,48 @@ func (fields *ankiFields) Init(db AnkiDatabase) error {
 
 type ankiTemplates struct {
 	schema string
+	add    string
 }
 
-func (templates *ankiTemplates) Init(db AnkiDatabase) error {
-	return db.CollectionExec(templates.schema)
+func (tpl *ankiTemplates) Init(db AnkiDatabase) error {
+	return db.CollectionExec(tpl.schema)
+}
+
+func (tpl *ankiTemplates) Add(db AnkiDatabase, ntid int64, ord int, name string, config []byte) error {
+	var err error
+
+	now := time.Now()
+
+	err = db.CollectionExec(fmt.Sprintf(tpl.add, ntid, ord, name, now.Unix(), hex.EncodeToString(config)))
+	if err != nil {
+		return err
+	}
+
+	return err
 }
 
 // ==================================================
 
 type ankiNoteTypes struct {
 	schema string
+	add    string
 }
 
 func (nt *ankiNoteTypes) Init(db AnkiDatabase) error {
 	return db.CollectionExec(nt.schema)
+}
+
+func (nt *ankiNoteTypes) Add(db AnkiDatabase, id int64, name string, config []byte) (int64, error) {
+	var err error
+
+	now := time.Now()
+
+	err = db.CollectionExec(fmt.Sprintf(nt.add, id, name, now.Unix(), 0, hex.EncodeToString(config)))
+	if err != nil {
+		return 0, err
+	}
+
+	return id, nil
 }
 
 // ==================================================
@@ -476,6 +539,81 @@ func (apkg *ankiPackage) Close() error {
 	return nil
 }
 
+func (apkg *ankiPackage) LoadProject(project *FlashcardProject) error {
+	var err error
+
+	kinds := map[string]anki.Notetype_Config_Kind{
+		"normal": anki.Notetype_Config_KIND_NORMAL,
+		"cloze":  anki.Notetype_Config_KIND_CLOZE,
+	}
+
+	style, err := os.ReadFile(project.Model.Style)
+	if err != nil {
+		return err
+	}
+
+	latexPrefix := `\documentclass[12pt]{article}
+\special{papersize=3in,5in}
+\usepackage[utf8]{inputenc}
+\usepackage{amssymb,amsmath}
+\pagestyle{empty}
+\setlength{\parindent}{0in}
+\begin{document}`
+
+	latexPostfix := `\end{document}`
+
+	ntconfig := &anki.Notetype_Config{
+		Kind:         kinds[project.Model.Kind],
+		SortFieldIdx: 0,
+		Css:          string(style),
+		LatexPre:     latexPrefix,
+		LatexPost:    latexPostfix,
+		LatexSvg:     false,
+		Reqs:         nil,
+	}
+
+	ntcfg, err := proto.Marshal(ntconfig)
+	if err != nil {
+		return err
+	}
+
+	notetypes := NewAnkiNoteTypes()
+	ntid, err := notetypes.Add(apkg.database, project.Model.Identifier, project.Model.Name, ntcfg)
+	if err != nil {
+		return err
+	}
+
+	templates := NewAnkiTemplates()
+	for ord, tpl := range project.Model.Templates {
+		qfmt, err := os.ReadFile(tpl.QFmt)
+		if err != nil {
+			return err
+		}
+
+		afmt, err := os.ReadFile(tpl.AFmt)
+		if err != nil {
+			return err
+		}
+
+		cfg := &anki.Notetype_Template_Config{
+			QFormat: string(qfmt),
+			AFormat: string(afmt),
+		}
+
+		tplcfg, err := proto.Marshal(cfg)
+		if err != nil {
+			return err
+		}
+
+		err = templates.Add(apkg.database, ntid, ord, tpl.Name, tplcfg)
+		if err != nil {
+			return err
+		}
+	}
+
+	return err
+}
+
 // ==================================================
 
 //  C O N S T R U C T O R S
@@ -483,25 +621,43 @@ func (apkg *ankiPackage) Close() error {
 func NewAnkiCollection() AnkiCollection {
 	col := new(ankiCollection)
 
+	/**
+	a single row with information about the collection
+	  id = arbitrary number
+	  crt = creation date in seconds
+	  mod = last modified in milliseconds
+	  scm = schema modification time
+	  ver = schema version
+	  dty = dirty, unused, set to 0
+	  usn = update sequence number
+	  ls = last sync time
+	  conf = json with synced configuration options
+	  models = json representing models
+	  decks = json representing decks
+	  dconf = json representing deck configuration
+	  tags = cache of tags used in the collection
+	**/
 	col.schema = `
-    CREATE TABLE col (
-        id              integer primary key,
-        crt             integer not null,
-        mod             integer not null,
-        scm             integer not null,
-        ver             integer not null,
-        dty             integer not null,
-        usn             integer not null,
-        ls              integer not null,
-        conf            text not null,
-        models          text not null,
-        decks           text not null,
-        dconf           text not null,
-        tags            text not null
-    );
-
-    INSERT INTO col VALUES(1,1570327200,1716314047291,1712183754557,18,0,2108,1716314047291,'','','','','');
-  `
+		CREATE TABLE col (
+			id              integer primary key,
+			crt             integer not null,
+			mod             integer not null,
+			scm             integer not null,
+			ver             integer not null,
+			dty             integer not null,
+			usn             integer not null,
+			ls              integer not null,
+			conf            text not null,
+			models          text not null,
+			decks           text not null,
+			dconf           text not null,
+			tags            text not null
+		);
+	`
+	col.add = `
+		DELETE FROM col;
+		INSERT INTO col VALUES(%d,%d,%d,%d,18,0,0,0,'','','','','');
+	`
 
 	return col
 }
@@ -509,6 +665,20 @@ func NewAnkiCollection() AnkiCollection {
 func NewAnkiNotes() AnkiNotes {
 	notes := new(ankiNotes)
 
+	/**
+	raw information
+	  id = creation time in milliseconds
+	  guid = globally unique ID
+	  mid = model ID
+	  mod = modification timestamp in seconds
+	  usn = update sequence number
+	  tags = tags space-separated
+	  flds = fields separated by 0x1f (31) character
+	  sfld = sort field
+	  csum = checksum, integer representation of the first 8 digits of sha1 hash of the first field
+	  flags = not used, set to 0
+	  data = not used, set to empty string
+	**/
 	notes.schema = `
     CREATE TABLE notes (
         id              integer primary key,   /* 0 */
@@ -654,10 +824,13 @@ func NewAnkiTemplates() AnkiTemplates {
 		CREATE UNIQUE INDEX idx_templates_name_ntid ON templates (name, ntid);
 		CREATE INDEX idx_templates_usn ON templates (usn);
   	`
+	tpl.add = `INSERT INTO templates VALUES(%d,%d,'%s',%d,0,X'%s');`
 
 	return tpl
 }
 
+/**
+**/
 func NewAnkiNoteTypes() AnkiNoteTypes {
 	nt := new(ankiNoteTypes)
 
@@ -673,6 +846,7 @@ func NewAnkiNoteTypes() AnkiNoteTypes {
 		CREATE UNIQUE INDEX idx_notetypes_name ON notetypes (name);
 		CREATE INDEX idx_notetypes_usn ON notetypes (usn);
   	`
+	nt.add = "INSERT INTO notetypes VALUES(%d,'%s',%d,%d,X'%s');"
 
 	return nt
 }

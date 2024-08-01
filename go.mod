@@ -9,6 +9,7 @@ require (
 	github.com/spf13/cobra v1.8.0
 	github.com/spf13/viper v1.18.2
 	golang.org/x/net v0.19.0
+	google.golang.org/protobuf v1.31.0
 )
 
 require (

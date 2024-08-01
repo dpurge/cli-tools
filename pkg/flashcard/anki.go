@@ -7,7 +7,7 @@ import (
 func buildAnkiPackage(projectfile string) (string, error) {
 	var err error
 
-	project, err := readProject(projectfile)
+	project, err := tool.ReadProject(projectfile)
 	if err != nil {
 		return "", err
 	}
@@ -19,6 +19,11 @@ func buildAnkiPackage(projectfile string) (string, error) {
 		return "", err
 	}
 	defer apkg.Close()
+
+	err = apkg.LoadProject(project)
+	if err != nil {
+		return "", err
+	}
 
 	return project.Filename, nil
 }

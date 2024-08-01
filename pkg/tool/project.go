@@ -1,10 +1,11 @@
-package flashcard
+package tool
 
 import (
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
@@ -27,28 +28,27 @@ type FlashcardData struct {
 }
 
 type FlashcardDeck struct {
-	Identifier string `yaml:"identifier"`
+	Identifier int64  `yaml:"identifier"`
 	Name       string `yaml:"name"`
 }
 
 type FlashcardModel struct {
-	Identifier string              `yaml:"identifier"`
+	Identifier int64               `yaml:"identifier"`
 	Name       string              `yaml:"name"`
-	Type       string              `yaml:"type"`
+	Kind       string              `yaml:"kind"`
 	Style      string              `yaml:"style"`
 	Templates  []FlashcardTemplate `yaml:"templates"`
 	Fields     []FlashcardField    `yaml:"fields"`
 }
 
 type FlashcardProject struct {
-	Identifier string          `yaml:"identifier"`
-	Filename   string          `yaml:"filename"`
-	Deck       FlashcardDeck   `yaml:"deck"`
-	Model      FlashcardModel  `yaml:"model"`
-	Data       []FlashcardData `yaml:"data"`
+	Filename string          `yaml:"filename"`
+	Deck     FlashcardDeck   `yaml:"deck"`
+	Model    FlashcardModel  `yaml:"model"`
+	Data     []FlashcardData `yaml:"data"`
 }
 
-func readProject(filename string) (*FlashcardProject, error) {
+func ReadProject(filename string) (*FlashcardProject, error) {
 
 	buf, err := os.ReadFile(filename)
 	if err != nil {
@@ -70,6 +70,11 @@ func readProject(filename string) (*FlashcardProject, error) {
 
 	if project.Filename, err = filepath.Abs(filepath.Join(directory, project.Filename)); err != nil {
 		return nil, err
+	}
+
+	kinds := []string{"normal", "cloze"}
+	if !slices.Contains(kinds, project.Model.Kind) {
+		return nil, fmt.Errorf("invalid model kind: %s (valid kinds: %v)", project.Model.Kind, kinds)
 	}
 
 	if project.Model.Style, err = filepath.Abs(filepath.Join(directory, project.Model.Style)); err != nil {
