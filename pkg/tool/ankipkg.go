@@ -29,7 +29,7 @@ type AnkiDatabase interface {
 type AnkiPackage interface {
 	Open(string) error
 	Close() error
-	LoadProject(*FlashcardProject) error
+	ImportProject(*FlashcardProject) error
 }
 
 type AnkiCollection interface {
@@ -38,7 +38,8 @@ type AnkiCollection interface {
 }
 
 type AnkiNotes interface {
-	Init(AnkiDatabase) error
+	Init(db AnkiDatabase) error
+	Add(db AnkiDatabase) error
 }
 
 type AnkiCards interface {
@@ -58,7 +59,8 @@ type AnkiConfig interface {
 }
 
 type AnkiFields interface {
-	Init(AnkiDatabase) error
+	Init(db AnkiDatabase) error
+	Add(db AnkiDatabase, ntid int64, ord int, name string, config []byte) error
 }
 
 type AnkiTemplates interface {
@@ -138,10 +140,16 @@ func (col *ankiCollection) Add(db AnkiDatabase) (int64, error) {
 
 type ankiNotes struct {
 	schema string
+	add    string
 }
 
-func (notes *ankiNotes) Init(db AnkiDatabase) error {
-	return db.CollectionExec(notes.schema)
+func (nt *ankiNotes) Init(db AnkiDatabase) error {
+	return db.CollectionExec(nt.schema)
+}
+
+func (nt *ankiNotes) Add(db AnkiDatabase) error {
+	var err error
+	return err
 }
 
 // ==================================================
@@ -188,10 +196,15 @@ func (cfg *ankiConfig) Init(db AnkiDatabase) error {
 
 type ankiFields struct {
 	schema string
+	add    string
 }
 
 func (fields *ankiFields) Init(db AnkiDatabase) error {
 	return db.CollectionExec(fields.schema)
+}
+
+func (fields *ankiFields) Add(db AnkiDatabase, ntid int64, ord int, name string, config []byte) error {
+	return db.CollectionExec(fmt.Sprintf(fields.add, ntid, ord, name, hex.EncodeToString(config)))
 }
 
 // ==================================================
@@ -539,7 +552,7 @@ func (apkg *ankiPackage) Close() error {
 	return nil
 }
 
-func (apkg *ankiPackage) LoadProject(project *FlashcardProject) error {
+func (apkg *ankiPackage) ImportProject(project *FlashcardProject) error {
 	var err error
 
 	kinds := map[string]anki.Notetype_Config_Kind{
@@ -547,29 +560,30 @@ func (apkg *ankiPackage) LoadProject(project *FlashcardProject) error {
 		"cloze":  anki.Notetype_Config_KIND_CLOZE,
 	}
 
-	style, err := os.ReadFile(project.Model.Style)
+	style, err := os.ReadFile(project.Model.Style.CSS)
 	if err != nil {
 		return err
 	}
 
-	latexPrefix := `\documentclass[12pt]{article}
-\special{papersize=3in,5in}
-\usepackage[utf8]{inputenc}
-\usepackage{amssymb,amsmath}
-\pagestyle{empty}
-\setlength{\parindent}{0in}
-\begin{document}`
+	latexPrefix, err := os.ReadFile(project.Model.Style.Latex.Prefix)
+	if err != nil {
+		return err
+	}
 
-	latexPostfix := `\end{document}`
+	latexPostfix, err := os.ReadFile(project.Model.Style.Latex.Postfix)
+	if err != nil {
+		return err
+	}
 
 	ntconfig := &anki.Notetype_Config{
 		Kind:         kinds[project.Model.Kind],
 		SortFieldIdx: 0,
 		Css:          string(style),
-		LatexPre:     latexPrefix,
-		LatexPost:    latexPostfix,
+		LatexPre:     string(latexPrefix),
+		LatexPost:    string(latexPostfix),
 		LatexSvg:     false,
 		Reqs:         nil,
+		Other:        []byte("{\"vers\":[],\"tags\":[]}"),
 	}
 
 	ntcfg, err := proto.Marshal(ntconfig)
@@ -609,6 +623,31 @@ func (apkg *ankiPackage) LoadProject(project *FlashcardProject) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	fields := NewAnkiFields()
+	for ord, fld := range project.Model.Fields {
+		cfg := &anki.Notetype_Field_Config{
+			Sticky:            false,
+			Rtl:               fld.RTL,
+			FontName:          fld.Font.Name,
+			FontSize:          fld.Font.Size,
+			Description:       fld.Description,
+			PlainText:         fld.Format != "text",
+			Collapsed:         true,
+			ExcludeFromSearch: false,
+			// Id: 0,
+			// Tag: 0,
+			PreventDeletion: false,
+			Other:           []byte("{\"media\":[]}"),
+		}
+
+		fldcfg, err := proto.Marshal(cfg)
+		if err != nil {
+			return err
+		}
+
+		fields.Add(apkg.database, ntid, ord, fld.Name, fldcfg)
 	}
 
 	return err
@@ -652,12 +691,11 @@ func NewAnkiCollection() AnkiCollection {
 			decks           text not null,
 			dconf           text not null,
 			tags            text not null
-		);
-	`
+		);`
+
 	col.add = `
 		DELETE FROM col;
-		INSERT INTO col VALUES(%d,%d,%d,%d,18,0,0,0,'','','','','');
-	`
+		INSERT INTO col VALUES(%d,%d,%d,%d,18,0,0,0,'','','','','');`
 
 	return col
 }
@@ -696,8 +734,10 @@ func NewAnkiNotes() AnkiNotes {
 
     CREATE INDEX ix_notes_usn on notes (usn);
 	CREATE INDEX ix_notes_csum on notes (csum);
-	CREATE INDEX idx_notes_mid ON notes (mid);
-  `
+	CREATE INDEX idx_notes_mid ON notes (mid);`
+
+	notes.add = `
+		INSERT INTO notes VALUES(%d,'%s',%d,%d,%d,'%s','%s',%d,%d,0,'');`
 
 	return notes
 }
@@ -730,8 +770,7 @@ func NewAnkiCards() AnkiCards {
     CREATE INDEX ix_cards_usn on cards (usn);
 	CREATE INDEX ix_cards_nid on cards (nid);
 	CREATE INDEX ix_cards_sched on cards (did, queue, due);
-	CREATE INDEX idx_cards_odid ON cards (odid) WHERE odid != 0;
-  `
+	CREATE INDEX idx_cards_odid ON cards (odid) WHERE odid != 0;`
 
 	return cards
 }
@@ -752,8 +791,7 @@ func NewAnkiRevlog() AnkiRevlog {
       type            integer not null
     );
     CREATE INDEX ix_revlog_usn on revlog (usn);
-	CREATE INDEX ix_revlog_cid on revlog (cid);
-  `
+	CREATE INDEX ix_revlog_cid on revlog (cid);`
 
 	return revlog
 }
@@ -768,8 +806,7 @@ func NewAnkiDeckConfig() AnkiDeckConfig {
 		mtime_secs integer NOT NULL,
 		usn integer NOT NULL,
 		config blob NOT NULL
-		);
-  	`
+		);`
 
 	return deckcfg
 }
@@ -783,8 +820,7 @@ func NewAnkiConfig() AnkiConfig {
 		usn integer NOT NULL,
 		mtime_secs integer NOT NULL,
 		val blob NOT NULL
-		) without rowid;
-  	`
+		) without rowid;`
 
 	return cfg
 }
@@ -801,8 +837,9 @@ func NewAnkiFields() AnkiFields {
 		PRIMARY KEY (ntid, ord)
 		) without rowid;
 
-		CREATE UNIQUE INDEX idx_fields_name_ntid ON fields (name, ntid);
-  	`
+		CREATE UNIQUE INDEX idx_fields_name_ntid ON fields (name, ntid);`
+
+	fields.add = `INSERT INTO fields VALUES(%d,%d,'%s',X'%s');`
 
 	return fields
 }
@@ -822,9 +859,17 @@ func NewAnkiTemplates() AnkiTemplates {
 		) without rowid;
 
 		CREATE UNIQUE INDEX idx_templates_name_ntid ON templates (name, ntid);
-		CREATE INDEX idx_templates_usn ON templates (usn);
-  	`
-	tpl.add = `INSERT INTO templates VALUES(%d,%d,'%s',%d,0,X'%s');`
+		CREATE INDEX idx_templates_usn ON templates (usn);`
+	tpl.add = `
+		INSERT INTO templates
+			VALUES(%d,%d,'%s',%d,0,X'%s')
+		ON CONFLICT (name, ntid) DO UPDATE
+		SET
+			ord = excluded.ord,
+			mtime_secs = excluded.mtime_secs,
+			usn = usn + 1,
+			config = excluded.config
+		WHERE ntid = excluded.ntid AND name = excluded.name;`
 
 	return tpl
 }
@@ -844,9 +889,17 @@ func NewAnkiNoteTypes() AnkiNoteTypes {
 		);
 
 		CREATE UNIQUE INDEX idx_notetypes_name ON notetypes (name);
-		CREATE INDEX idx_notetypes_usn ON notetypes (usn);
-  	`
-	nt.add = "INSERT INTO notetypes VALUES(%d,'%s',%d,%d,X'%s');"
+		CREATE INDEX idx_notetypes_usn ON notetypes (usn);`
+	nt.add = `
+		INSERT INTO notetypes
+			VALUES(%d,'%s',%d,%d,X'%s')
+		ON CONFLICT(id) DO UPDATE
+		SET
+			name = excluded.name,
+			mtime_secs = excluded.mtime_secs,
+			usn = usn + 1,
+			config = excluded.config
+		WHERE id = excluded.id;`
 
 	return nt
 }
@@ -864,8 +917,7 @@ func NewAnkiDecks() AnkiDecks {
 		kind blob NOT NULL
 		);
 
-		CREATE UNIQUE INDEX idx_decks_name ON decks (name);
-  	`
+		CREATE UNIQUE INDEX idx_decks_name ON decks (name);`
 
 	return decks
 }
@@ -879,8 +931,7 @@ func NewAnkiTags() AnkiTags {
 		usn integer NOT NULL,
 		collapsed boolean NOT NULL,
 		config blob NULL
-		) without rowid;
-  	`
+		) without rowid;`
 
 	return tags
 }
@@ -896,8 +947,7 @@ func NewAnkiGraves() AnkiGraves {
 		PRIMARY KEY (oid, type)
 		) WITHOUT ROWID;
 
-		CREATE INDEX idx_graves_pending ON graves (usn);
-  	`
+		CREATE INDEX idx_graves_pending ON graves (usn);`
 
 	return graves
 }
@@ -908,8 +958,7 @@ func NewAnkiAndroidMetadata() AnkiAndroidMetadata {
 	meta.schema = `
 	CREATE TABLE android_metadata (
 	locale TEXT
-	);
-  	`
+	);`
 
 	return meta
 }
@@ -925,8 +974,7 @@ func NewAnkiMedia() AnkiMedia {
 		dirty int NOT NULL
 		) without rowid;
 
-		CREATE INDEX idx_media_dirty ON media (dirty) WHERE dirty = 1;
-  	`
+		CREATE INDEX idx_media_dirty ON media (dirty) WHERE dirty = 1;`
 
 	return media
 }
@@ -940,8 +988,7 @@ func NewAnkiMeta() AnkiMeta {
 		lastUsn int
 		);
 
-		INSERT INTO meta VALUES(1698008361925,156);
-  	`
+		INSERT INTO meta VALUES(1698008361925,156);`
 
 	return meta
 }

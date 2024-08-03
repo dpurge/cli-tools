@@ -20,7 +20,7 @@ func buildAnkiPackage(projectfile string) (string, error) {
 	}
 	defer apkg.Close()
 
-	err = apkg.LoadProject(project)
+	err = apkg.ImportProject(project)
 	if err != nil {
 		return "", err
 	}
