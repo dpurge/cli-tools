@@ -2,7 +2,6 @@ package flashcard
 
 import (
 	"fmt"
-	"log"
 
 	"github.com/spf13/cobra"
 )
@@ -12,11 +11,12 @@ var buildCmd = &cobra.Command{
 	Short: "Build flashcard project",
 	Long:  "Build flashard project",
 	Run: func(cmd *cobra.Command, args []string) {
-		flashcardFile, err := buildAnkiPackage(_project)
-		if err != nil {
-			log.Fatal(err)
-		}
-		fmt.Println(flashcardFile)
+		// flashcardFile, err := buildAnkiPackage(_project)
+		// if err != nil {
+		// 	log.Fatal(err)
+		// }
+		// fmt.Println(flashcardFile)
+		fmt.Println("Not implemented!")
 	},
 }
 
