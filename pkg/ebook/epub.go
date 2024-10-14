@@ -33,7 +33,6 @@ func buildEPub(projectfile string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// fmt.Println(stylesheets)
 
 	_, err = addFonts(book, project.Font)
 	if err != nil {
@@ -159,6 +158,7 @@ func addTexts(book *epub.Epub, textfiles [][]string, styles EBookStyles) ([]stri
 			}
 		}
 	}
+
 	return texts, nil
 }
 
