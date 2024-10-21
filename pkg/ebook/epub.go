@@ -73,7 +73,7 @@ func setLanguage(book *epub.Epub, language string, script string) error {
 
 func setCover(book *epub.Epub, cover string, style string) (string, error) {
 	var err error
-	coverPath, _ := book.AddImage(cover, "cover.png")
+	coverPath, _ := book.AddImage(cover, filepath.Base(cover))
 	if style == "" {
 		err = book.SetCover(coverPath, "")
 	} else {

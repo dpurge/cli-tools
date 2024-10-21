@@ -10,7 +10,7 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "cwd": "C:\\jdp\\src\\local\\ebook-example",
+            "cwd": "${workspaceFolder}\\..\\epub-private\\src\\txt\\lang-notes\\ind\\",
             "program": "${workspaceFolder}\\cmd\\ebook\\main.go",
             "args": [
                 "build"
