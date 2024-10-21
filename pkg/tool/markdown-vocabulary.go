@@ -32,8 +32,8 @@ type Vocabulary struct {
 	ast.Container
 }
 
-var startVocabulary = []byte(":::Start-Vocabulary")
-var endVocabulary = []byte(":::End")
+var startVocabulary = []byte("{start-vocabulary}")
+var endVocabulary = []byte("{end-vocabulary}")
 
 func ParseVocabulary(data []byte) (ast.Node, []byte, int) {
 	if !bytes.HasPrefix(data, startVocabulary) {

@@ -9,11 +9,15 @@ import (
 
 type Dialog struct {
 	ast.Container
-	// ImageURLS []string
 }
 
-var startDialog = []byte(":::Start-Dialog")
-var endDialog = []byte(":::End")
+type DialogItem struct {
+	ast.Container
+	Person string
+}
+
+var startDialog = []byte("{start-dialog}")
+var endDialog = []byte("{end-dialog}")
 
 func ParseDialog(data []byte) (ast.Node, []byte, int) {
 	if !bytes.HasPrefix(data, startDialog) {
@@ -29,10 +33,18 @@ func ParseDialog(data []byte) (ast.Node, []byte, int) {
 	return res, data[start+len(startDialog) : end], end + len(endDialog)
 }
 
-func RenderDialog(w io.Writer, s *Dialog, entering bool) {
+func RenderDialog(w io.Writer, n *Dialog, entering bool) {
 	if entering {
 		io.WriteString(w, "<dialog>")
 	} else {
 		io.WriteString(w, "</dialog>")
+	}
+}
+
+func RenderDialogItem(w io.Writer, n *DialogItem, entering bool) {
+	if entering {
+		io.WriteString(w, "<item>")
+	} else {
+		io.WriteString(w, "</item>")
 	}
 }

@@ -36,7 +36,7 @@ func MarkdownToHTML(md []byte) ([]byte, error) {
 
 	h := markdown.Render(doc, renderer)
 
-	fmt.Printf("%s", h)
+	// fmt.Printf("%s", h)
 
 	return h, nil
 }
@@ -84,6 +84,11 @@ func renderHook(w io.Writer, node ast.Node, entering bool) (ast.WalkStatus, bool
 		RenderDialog(w, leafNode, entering)
 		return ast.GoToNext, true
 	}
+	if leafNode, ok := node.(*DialogItem); ok {
+		RenderDialogItem(w, leafNode, entering)
+		return ast.GoToNext, true
+	}
+
 	return ast.GoToNext, false
 }
 

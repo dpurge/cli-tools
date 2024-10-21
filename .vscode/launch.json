@@ -10,7 +10,7 @@
             "type": "go",
             "request": "launch",
             "mode": "auto",
-            "cwd": "${workspaceFolder}\\..\\epub-private\\src\\txt\\lang-notes\\ind\\",
+            "cwd": "${workspaceFolder}\\..\\epub-private\\src\\txt\\lang-notes\\cmn-hans\\",
             "program": "${workspaceFolder}\\cmd\\ebook\\main.go",
             "args": [
                 "build"
