@@ -83,6 +83,7 @@ func ParseDialog(data []byte) (ast.Node, []byte, int) {
 	}
 
 	res.SetChildren(items)
+	// res.SetParent(nil)
 	return res, nil, end + len(endDialog)
 }
 
