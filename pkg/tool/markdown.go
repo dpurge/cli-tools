@@ -1,8 +1,6 @@
 package tool
 
 import (
-	"bytes"
-	"fmt"
 	"io"
 	"os"
 
@@ -28,9 +26,9 @@ func MarkdownToHTML(md []byte) ([]byte, error) {
 	p := newMarkdownParser()
 	doc := p.Parse(md)
 
-	var buf bytes.Buffer
-	ast.Print(&buf, doc)
-	fmt.Print(buf.String())
+	// var buf bytes.Buffer
+	// ast.Print(&buf, doc)
+	// fmt.Print(buf.String())
 
 	renderer := newHtmlRenderer()
 
