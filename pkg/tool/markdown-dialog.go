@@ -21,6 +21,15 @@ type DialogItem struct {
 var startDialog = []byte("{start-dialog}")
 var endDialog = []byte("{end-dialog}")
 
+func (n *Dialog) CanContain(v ast.Node) bool {
+	switch v.(type) {
+	default:
+		return false
+	case *DialogItem:
+		return true
+	}
+}
+
 func ParseDialog(data []byte) (ast.Node, []byte, int) {
 	if !bytes.HasPrefix(data, startDialog) {
 		return nil, nil, 0
@@ -33,11 +42,9 @@ func ParseDialog(data []byte) (ast.Node, []byte, int) {
 	end = end + start
 
 	block := data[start+len(startDialog) : end]
-	// fmt.Println("-->" + string(block) + "<--")
 	lines := strings.Split(strings.TrimSpace(string(block)), "\n")
 
 	res := &Dialog{}
-	// fmt.Println(res.GetParent())
 
 	items := []ast.Node{}
 	buf := []string{}
@@ -83,30 +90,32 @@ func ParseDialog(data []byte) (ast.Node, []byte, int) {
 	}
 
 	res.SetChildren(items)
-	// res.SetParent(nil)
 	return res, nil, end + len(endDialog)
 }
 
 func RenderDialog(w io.Writer, n *Dialog, entering bool) {
 	if entering {
-		io.WriteString(w, "<dialog>\n")
+		io.WriteString(w, "<div class=\"dialog\">\n")
 	} else {
-		io.WriteString(w, "</dialog>\n")
+		io.WriteString(w, "</div>\n")
 	}
 }
 
 func RenderDialogItem(w io.Writer, n *DialogItem, entering bool) {
 	if entering {
-		io.WriteString(w, "<item>\n")
-		io.WriteString(w, "<person>"+n.PersonName+"</person>\n")
-		io.WriteString(w, "<content>"+string(n.Content)+"</content>\n")
-		io.WriteString(w, "</item>\n")
-	} // else {}
+		io.WriteString(w, "<div class=\"dialog-item\">\n")
+		io.WriteString(w, "<div class=\"dialog-person\">")
+		io.WriteString(w, n.PersonName)
+		io.WriteString(w, "</div>\n")
+		io.WriteString(w, "<div class=\"dialog-content\">")
+		io.Writer.Write(w, n.Content)
+		io.WriteString(w, "</div>\n")
+		io.WriteString(w, "</div>\n")
+	}
 }
 
 func getDialogItem(person string, lines []string) ast.Node {
 	txt := strings.TrimSpace(strings.Join(lines, "\n"))
-	// fmt.Println("-->" + txt + "<--")
 	n := &DialogItem{}
 	n.PersonName = person
 	n.Content = []byte(txt)

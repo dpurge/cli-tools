@@ -32,6 +32,30 @@ type Vocabulary struct {
 	ast.Container
 }
 
+func (n *Vocabulary) CanContain(v ast.Node) bool {
+	switch v.(type) {
+	default:
+		return false
+	case *VocabularyPhrase:
+		return true
+	case *VocabularyGrammar:
+		return true
+	case *VocabularyTranscription:
+		return true
+	case *VocabularyTranslation:
+		return true
+	}
+}
+
+func (n *VocabularyItem) CanContain(v ast.Node) bool {
+	switch v.(type) {
+	default:
+		return false
+	case *VocabularyItem:
+		return true
+	}
+}
+
 var startVocabulary = []byte("{start-vocabulary}")
 var endVocabulary = []byte("{end-vocabulary}")
 
@@ -125,48 +149,48 @@ func ParseVocabulary(data []byte) (ast.Node, []byte, int) {
 
 func RenderVocabulary(w io.Writer, n *Vocabulary, entering bool) {
 	if entering {
-		io.WriteString(w, "<vocabulary>\n")
+		io.WriteString(w, "<div class=\"vocabulary\">\n")
 	} else {
-		io.WriteString(w, "</vocabulary>\n")
+		io.WriteString(w, "</div>\n")
 	}
 }
 
 func RenderVocabularyItem(w io.Writer, n *VocabularyItem, entering bool) {
 	if entering {
-		io.WriteString(w, "<item>\n")
+		io.WriteString(w, "<div class=\"vocabulary-item\">\n")
 	} else {
-		io.WriteString(w, "</item>\n")
+		io.WriteString(w, "</div>\n")
 	}
 }
 
 func RenderVocabularyPhrase(w io.Writer, n *VocabularyPhrase, entering bool) {
 	if entering {
-		io.WriteString(w, "<phrase>")
-		io.WriteString(w, string(n.Content))
-		io.WriteString(w, "</phrase>\n")
+		io.WriteString(w, "<span class=\"vocabulary-phrase\">")
+		io.Writer.Write(w, n.Content)
+		io.WriteString(w, "</span>\n")
 	}
 }
 
 func RenderVocabularyGrammar(w io.Writer, n *VocabularyGrammar, entering bool) {
 	if entering {
-		io.WriteString(w, "<grammar>")
-		io.WriteString(w, string(n.Content))
-		io.WriteString(w, "</grammar>\n")
+		io.WriteString(w, "<span class=\"vocabulary-grammar\">")
+		io.Writer.Write(w, n.Content)
+		io.WriteString(w, "</span>\n")
 	}
 }
 
 func RenderVocabularyTranscription(w io.Writer, n *VocabularyTranscription, entering bool) {
 	if entering {
-		io.WriteString(w, "<transcription>")
-		io.WriteString(w, string(n.Content))
-		io.WriteString(w, "</transcription>\n")
+		io.WriteString(w, "<span class=\"vocabulary-transcription\">")
+		io.Writer.Write(w, n.Content)
+		io.WriteString(w, "</span>\n")
 	}
 }
 
 func RenderVocabularyTranslation(w io.Writer, n *VocabularyTranslation, entering bool) {
 	if entering {
-		io.WriteString(w, "<translation>")
-		io.WriteString(w, string(n.Content))
-		io.WriteString(w, "</translation>\n")
+		io.WriteString(w, "<span class=\"vocabulary-translation\">")
+		io.Writer.Write(w, n.Content)
+		io.WriteString(w, "</span>\n")
 	}
 }
