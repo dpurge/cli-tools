@@ -10,6 +10,9 @@ import (
 	"github.com/gomarkdown/markdown/parser"
 )
 
+// var MDParser = newMarkdownParser()
+// var HtmlRenderer = newHtmlRenderer()
+
 func MarkdownFileToHTML(filename string) (string, error) {
 	md, err := os.ReadFile(filename)
 	if err != nil {

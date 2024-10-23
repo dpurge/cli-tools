@@ -15,7 +15,7 @@ type Dialog struct {
 
 type DialogItem struct {
 	ast.Leaf
-	PersonName string
+	Header string
 }
 
 var startDialog = []byte("{start-dialog}")
@@ -48,27 +48,17 @@ func ParseDialog(data []byte) (ast.Node, []byte, int) {
 
 	items := []ast.Node{}
 	buf := []string{}
-	personName := ""
+	header := ""
 	for _, s := range lines {
 		s = strings.TrimRight(s, " *")
-		if s == "--:" {
+		if isDialogItemHeader(s) {
 			if len(buf) > 0 {
-				n := getDialogItem(personName, buf)
+				n := getDialogItem(header, buf)
 				n.SetParent(res)
 				items = append(items, n)
 				buf = nil
 			}
-			personName = ""
-			continue
-		}
-		if len(s) > 3 && s[0] == '@' && s[len(s)-1] == ':' {
-			if len(buf) > 0 {
-				n := getDialogItem(personName, buf)
-				n.SetParent(res)
-				items = append(items, n)
-				buf = nil
-			}
-			personName = s[1 : len(s)-1]
+			header = getDialogItemHeader(s)
 			continue
 		}
 		if s == "" {
@@ -83,7 +73,7 @@ func ParseDialog(data []byte) (ast.Node, []byte, int) {
 		log.Fatal("Wrong line indentation for dialog item: " + s)
 	}
 	if len(buf) > 0 {
-		n := getDialogItem(personName, buf)
+		n := getDialogItem(header, buf)
 		n.SetParent(res)
 		items = append(items, n)
 		buf = nil
@@ -104,8 +94,8 @@ func RenderDialog(w io.Writer, n *Dialog, entering bool) {
 func RenderDialogItem(w io.Writer, n *DialogItem, entering bool) {
 	if entering {
 		io.WriteString(w, "<div class=\"dialog-item\">\n")
-		io.WriteString(w, "<div class=\"dialog-person\">")
-		io.WriteString(w, n.PersonName)
+		io.WriteString(w, "<div class=\"dialog-header\">")
+		io.WriteString(w, n.Header)
 		io.WriteString(w, "</div>\n")
 		io.WriteString(w, "<div class=\"dialog-content\">")
 		io.Writer.Write(w, n.Content)
@@ -114,10 +104,38 @@ func RenderDialogItem(w io.Writer, n *DialogItem, entering bool) {
 	}
 }
 
-func getDialogItem(person string, lines []string) ast.Node {
+func getDialogItem(header string, lines []string) ast.Node {
 	txt := strings.TrimSpace(strings.Join(lines, "\n"))
+	doc, _ := MarkdownToHTML([]byte(txt))
 	n := &DialogItem{}
-	n.PersonName = person
-	n.Content = []byte(txt)
+	n.Header = header
+	n.Content = []byte(doc)
 	return n
+}
+
+func isDialogItemHeader(header string) bool {
+	if len(header) < 3 {
+		return false
+	}
+	if header == "--:" {
+		return true
+	}
+	if !(strings.HasPrefix(header, "@") || strings.HasPrefix(header, "＠")) {
+		return false
+	}
+	if !(strings.HasSuffix(header, ":") || strings.HasSuffix(header, "︰")) {
+		return false
+	}
+	return true
+}
+
+func getDialogItemHeader(header string) string {
+	res := "—"
+	if strings.HasPrefix(header, "@") {
+		res = strings.TrimLeft(header, "@")
+	}
+	if strings.HasPrefix(header, "＠") {
+		res = strings.TrimLeft(header, "＠")
+	}
+	return res
 }
