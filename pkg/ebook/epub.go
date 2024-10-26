@@ -65,8 +65,91 @@ func buildEPub(projectfile string) (string, error) {
 }
 
 func setLanguage(book *epub.Epub, language string, script string) error {
-	book.SetLang("en")
-	book.SetPpd("ltr")
+	switch language {
+	case "ajp":
+		book.SetLang("ar")
+	case "apc":
+		book.SetLang("ar")
+	case "arb":
+		book.SetLang("ar")
+	case "bul":
+		book.SetLang("bg")
+	case "ces":
+		book.SetLang("cs")
+	case "cmn":
+		if script == "hant" {
+			book.SetLang("zh-Hant")
+		} else {
+			book.SetLang("zh-Hans")
+		}
+	case "dan":
+		book.SetLang("da")
+	case "deu":
+		book.SetLang("de")
+	case "ell":
+		book.SetLang("el")
+	case "fas":
+		book.SetLang("fa")
+	case "fra":
+		book.SetLang("fr")
+	case "grc":
+		book.SetLang("el")
+	case "hin":
+		book.SetLang("hi")
+	case "ind":
+		book.SetLang("id")
+	case "ita":
+		book.SetLang("it")
+	case "kaz":
+		book.SetLang("kk")
+	case "lat":
+		book.SetLang("la")
+	case "lit":
+		book.SetLang("lt")
+	case "mon":
+		book.SetLang("mn")
+	case "nld":
+		book.SetLang("nl")
+	case "ron":
+		book.SetLang("ro")
+	case "spa":
+		book.SetLang("es")
+	case "srp":
+		book.SetLang("sr")
+	case "tgk":
+		book.SetLang("tg")
+	case "tha":
+		book.SetLang("th")
+	case "tur":
+		book.SetLang("tr")
+	case "uig":
+		book.SetLang("ug")
+	case "ukr":
+		book.SetLang("uk")
+	case "uzb":
+		book.SetLang("uz")
+	case "vie":
+		book.SetLang("vi")
+	case "yid":
+		book.SetLang("yi")
+	case "yue":
+		if script == "hans" {
+			book.SetLang("zh-Hans")
+		} else {
+			book.SetLang("zh-Hant")
+		}
+	default:
+		book.SetLang("en")
+	}
+
+	switch script {
+	case "arab":
+		book.SetPpd("rtl")
+	case "hebr":
+		book.SetPpd("rtl")
+	default:
+		book.SetPpd("ltr")
+	}
 
 	return nil
 }
