@@ -25,9 +25,10 @@ type EBookProject struct {
 }
 
 type EBookStyles struct {
-	Cover   string `yaml:"cover,omitempty"`
-	Section string `yaml:"section,omitempty"`
-	Chapter string `yaml:"chapter,omitempty"`
+	Cover   string   `yaml:"cover,omitempty"`
+	Section string   `yaml:"section,omitempty"`
+	Chapter string   `yaml:"chapter,omitempty"`
+	Common  []string `yaml:"common,omitempty"`
 }
 
 func readProject(filename string) (*EBookProject, error) {
@@ -64,6 +65,12 @@ func readProject(filename string) (*EBookProject, error) {
 
 	if project.Stylesheet.Chapter, err = tool.ResolvePath(directory, project.Stylesheet.Chapter, true); err != nil {
 		return nil, err
+	}
+
+	for i, val := range project.Stylesheet.Common {
+		if project.Stylesheet.Common[i], err = tool.ResolvePath(directory, val, true); err != nil {
+			return nil, err
+		}
 	}
 
 	if err = tool.ResolvePaths(directory, project.Font, true); err != nil {

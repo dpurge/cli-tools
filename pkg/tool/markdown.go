@@ -1,6 +1,7 @@
 package tool
 
 import (
+	"bytes"
 	"io"
 	"os"
 
@@ -36,6 +37,7 @@ func MarkdownToHTML(md []byte) ([]byte, error) {
 	renderer := newHtmlRenderer()
 
 	h := markdown.Render(doc, renderer)
+	h = bytes.ReplaceAll(h, []byte("<hr>"), []byte("<hr />"))
 
 	// fmt.Printf("%s", h)
 

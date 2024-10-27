@@ -45,7 +45,7 @@ func buildEPub(projectfile string) (string, error) {
 	}
 
 	if project.Cover != "" {
-		_, err = setCover(book, project.Cover, stylesheets.Cover)
+		_, err = setCover(book, project.Cover, stylesheets)
 		if err != nil {
 			return "", err
 		}
@@ -154,15 +154,10 @@ func setLanguage(book *epub.Epub, language string, script string) error {
 	return nil
 }
 
-func setCover(book *epub.Epub, cover string, style string) (string, error) {
+func setCover(book *epub.Epub, cover string, stylesheets EBookStyles) (string, error) {
 	var err error
 	coverPath, _ := book.AddImage(cover, filepath.Base(cover))
-	if style == "" {
-		err = book.SetCover(coverPath, "")
-	} else {
-		err = book.SetCover(coverPath, style)
-	}
-
+	err = book.SetCover(coverPath, stylesheets.Cover)
 	if err != nil {
 		return "", err
 	}
@@ -172,8 +167,25 @@ func setCover(book *epub.Epub, cover string, style string) (string, error) {
 func addStylesheets(book *epub.Epub, stylesheets EBookStyles) (EBookStyles, error) {
 	var styles EBookStyles
 
+	for i, val := range stylesheets.Common {
+		// fmt.Println("Stylesheet: ", i, "=>", val)
+		style, err := book.AddCSS(stylesheets.Common[i], filepath.Base(val))
+		if err != nil {
+			return styles, err
+		}
+		styles.Common = append(styles.Common, style)
+	}
+
+	if stylesheets.Cover != "" {
+		style, err := book.AddCSS(stylesheets.Cover, filepath.Base(stylesheets.Cover))
+		if err != nil {
+			return styles, err
+		}
+		styles.Cover = style
+	}
+
 	if stylesheets.Section != "" {
-		style, err := book.AddCSS(stylesheets.Section, "section.css")
+		style, err := book.AddCSS(stylesheets.Section, filepath.Base(stylesheets.Section))
 		if err != nil {
 			return styles, err
 		}
@@ -181,7 +193,7 @@ func addStylesheets(book *epub.Epub, stylesheets EBookStyles) (EBookStyles, erro
 	}
 
 	if stylesheets.Chapter != "" {
-		style, err := book.AddCSS(stylesheets.Chapter, "chapter.css")
+		style, err := book.AddCSS(stylesheets.Chapter, filepath.Base(stylesheets.Chapter))
 		if err != nil {
 			return styles, err
 		}
