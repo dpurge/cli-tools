@@ -123,7 +123,7 @@ func isDialogItemHeader(header string) bool {
 	if !(strings.HasPrefix(header, "@") || strings.HasPrefix(header, "＠")) {
 		return false
 	}
-	if !(strings.HasSuffix(header, ":") || strings.HasSuffix(header, "︰")) {
+	if !(strings.HasSuffix(header, ":") || strings.HasSuffix(header, "︰") || strings.HasSuffix(header, "：")) {
 		return false
 	}
 	return true
