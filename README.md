@@ -9,3 +9,9 @@ Command line tools for private projects.
 ```yml
 # Empty
 ```
+
+## Build
+
+```sh
+goreleaser build --snapshot --clean
+```

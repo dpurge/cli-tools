@@ -51,6 +51,9 @@ func parserHook(data []byte) (ast.Node, []byte, int) {
 	if node, d, n := ParseDialog(data); node != nil {
 		return node, d, n
 	}
+	if node, d, n := ParseParallel(data); node != nil {
+		return node, d, n
+	}
 	return nil, nil, 0
 }
 
@@ -89,6 +92,24 @@ func renderHook(w io.Writer, node ast.Node, entering bool) (ast.WalkStatus, bool
 	}
 	if leafNode, ok := node.(*DialogItem); ok {
 		RenderDialogItem(w, leafNode, entering)
+		return ast.GoToNext, true
+	}
+
+	// Parallel
+	if leafNode, ok := node.(*Parallel); ok {
+		RenderParallel(w, leafNode, entering)
+		return ast.GoToNext, true
+	}
+	if leafNode, ok := node.(*ParallelBlock); ok {
+		RenderParallelBlock(w, leafNode, entering)
+		return ast.GoToNext, true
+	}
+	if leafNode, ok := node.(*ParallelFirst); ok {
+		RenderParallelFirst(w, leafNode, entering)
+		return ast.GoToNext, true
+	}
+	if leafNode, ok := node.(*ParallelLast); ok {
+		RenderParallelLast(w, leafNode, entering)
 		return ast.GoToNext, true
 	}
 
