@@ -100,16 +100,16 @@ func renderHook(w io.Writer, node ast.Node, entering bool) (ast.WalkStatus, bool
 		RenderParallel(w, leafNode, entering)
 		return ast.GoToNext, true
 	}
-	if leafNode, ok := node.(*ParallelBlock); ok {
-		RenderParallelBlock(w, leafNode, entering)
+	if leafNode, ok := node.(*ParallelRow); ok {
+		RenderParallelRow(w, leafNode, entering)
 		return ast.GoToNext, true
 	}
-	if leafNode, ok := node.(*ParallelFirst); ok {
-		RenderParallelFirst(w, leafNode, entering)
+	if leafNode, ok := node.(*ParallelCellMain); ok {
+		RenderParallelCellMain(w, leafNode, entering)
 		return ast.GoToNext, true
 	}
-	if leafNode, ok := node.(*ParallelLast); ok {
-		RenderParallelLast(w, leafNode, entering)
+	if leafNode, ok := node.(*ParallelCellSecondary); ok {
+		RenderParallelCellSecondary(w, leafNode, entering)
 		return ast.GoToNext, true
 	}
 

@@ -12,15 +12,15 @@ type Parallel struct {
 	ast.Container
 }
 
-type ParallelBlock struct {
+type ParallelRow struct {
 	ast.Container
 }
 
-type ParallelFirst struct {
+type ParallelCellMain struct {
 	ast.Leaf
 }
 
-type ParallelLast struct {
+type ParallelCellSecondary struct {
 	ast.Leaf
 }
 
@@ -31,18 +31,18 @@ func (n *Parallel) CanContain(v ast.Node) bool {
 	switch v.(type) {
 	default:
 		return false
-	case *ParallelBlock:
+	case *ParallelRow:
 		return true
 	}
 }
 
-func (n *ParallelBlock) CanContain(v ast.Node) bool {
+func (n *ParallelRow) CanContain(v ast.Node) bool {
 	switch v.(type) {
 	default:
 		return false
-	case *ParallelFirst:
+	case *ParallelCellMain:
 		return true
-	case *ParallelLast:
+	case *ParallelCellSecondary:
 		return true
 	}
 }
@@ -69,7 +69,7 @@ func ParseParallel(data []byte) (ast.Node, []byte, int) {
 			continue
 		}
 
-		item := &ParallelBlock{}
+		item := &ParallelRow{}
 		item.SetParent(res)
 		children := []ast.Node{}
 
@@ -87,7 +87,7 @@ func ParseParallel(data []byte) (ast.Node, []byte, int) {
 
 		if first != "" {
 			doc, _ := MarkdownToHTML([]byte(first))
-			n := &ParallelFirst{}
+			n := &ParallelCellMain{}
 			n.Content = []byte(doc)
 			n.SetParent(item)
 			children = append(children, n)
@@ -95,7 +95,7 @@ func ParseParallel(data []byte) (ast.Node, []byte, int) {
 
 		if last != "" {
 			doc, _ := MarkdownToHTML([]byte(last))
-			n := &ParallelLast{}
+			n := &ParallelCellSecondary{}
 			n.Content = []byte(doc)
 			n.SetParent(item)
 			children = append(children, n)
@@ -116,25 +116,25 @@ func RenderParallel(w io.Writer, n *Parallel, entering bool) {
 	}
 }
 
-func RenderParallelBlock(w io.Writer, n *ParallelBlock, entering bool) {
+func RenderParallelRow(w io.Writer, n *ParallelRow, entering bool) {
 	if entering {
-		io.WriteString(w, "<div class=\"parallel-block\">\n")
+		io.WriteString(w, "<div class=\"parallel-row\">\n")
 	} else {
 		io.WriteString(w, "</div>\n")
 	}
 }
 
-func RenderParallelFirst(w io.Writer, n *ParallelFirst, entering bool) {
+func RenderParallelCellMain(w io.Writer, n *ParallelCellMain, entering bool) {
 	if entering {
-		io.WriteString(w, "<div class=\"parallel-first\">\n")
+		io.WriteString(w, "<div class=\"parallel-cell main\">\n")
 		io.Writer.Write(w, n.Content)
 		io.WriteString(w, "\n</div>\n")
 	}
 }
 
-func RenderParallelLast(w io.Writer, n *ParallelLast, entering bool) {
+func RenderParallelCellSecondary(w io.Writer, n *ParallelCellSecondary, entering bool) {
 	if entering {
-		io.WriteString(w, "<div class=\"parallel-last\">\n")
+		io.WriteString(w, "<div class=\"parallel-cell secondary\">\n")
 		io.Writer.Write(w, n.Content)
 		io.WriteString(w, "\n</div>\n")
 	}
