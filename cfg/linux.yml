@@ -1,0 +1,12 @@
+ImageMagick:
+  convert: convert
+DjVuLibre:
+  ddjvu: ddjvu
+K2Pdfopt:
+  k2pdfopt: k2pdfopt
+PdfTkServer:
+  pdftk: pdftk
+Poppler:
+  pdftoppm: pdftoppm
+CPDF:
+  cpdf: cpdf

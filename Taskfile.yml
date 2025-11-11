@@ -1,0 +1,80 @@
+version: '3'
+
+vars:
+  DIST_DIR: '{{.ROOT_DIR}}/dist'
+  REGISTRY: registry.home.arpa:5000
+  IMAGE: cli-tools
+  GIT_BRANCH:
+    sh: git rev-parse --abbrev-ref HEAD
+  GIT_COMMIT:
+    sh: git log -n 1 --format=%h
+  BUILD_DATE:
+    sh: date '+%Y-%m-%d'
+  COMMANDS: |
+    ebook
+    flashcard
+    scanbook
+
+tasks:
+
+  build:
+    desc: Build command binaries
+    cmds:
+      - for: { var: COMMANDS }
+        task: build-cmd
+        vars:
+          COMMAND: '{{.ITEM}}-cli'
+          WORKING_DIR: 'cmd/{{.ITEM}}'
+
+  package:
+    desc: Build artifacts for publishing
+    deps:
+      - build
+    requires:
+      vars:
+        - GIT_BRANCH
+        - GIT_COMMIT
+        - BUILD_DATE
+        - REGISTRY
+        - IMAGE
+    cmds:
+      - docker build --platform=linux/amd64 --pull=false --build-arg VERSION={{.BUILD_DATE}} --build-arg BRANCH={{.GIT_BRANCH}} --build-arg COMMIT={{.GIT_COMMIT}} -t {{.IMAGE}} .
+      - docker tag {{.IMAGE}} {{.REGISTRY}}/{{.IMAGE}}
+      - docker tag {{.IMAGE}} {{.REGISTRY}}/{{.IMAGE}}:{{.BUILD_DATE}}
+
+  publish:
+    desc: Push docker image to the repository
+    deps:
+      - package
+    requires:
+      vars:
+        - REGISTRY
+        - IMAGE
+        - BUILD_DATE
+    cmds:
+      - docker push {{.REGISTRY}}/{{.IMAGE}}:{{.BUILD_DATE}}
+      - docker push {{.REGISTRY}}/{{.IMAGE}}
+
+  build-cmd:
+    desc: Build command
+    internal: true
+    silent: true
+    dir: '{{.WORKING_DIR}}'
+    preconditions:
+      - test -f main.go
+    requires:
+      vars:
+        - WORKING_DIR
+        - COMMAND
+        - DIST_DIR
+        - BUILD_DATE
+        - GIT_COMMIT
+    cmds:
+      - cmd: echo 'Building {{.WORKING_DIR}} ...'
+      - cmd: |
+          if [ ! -d "{{.DIST_DIR}}" ]; then
+            echo "Creating: {{.DIST_DIR}}"
+            mkdir -p "{{.DIST_DIR}}"
+          fi
+          GOARCH=amd64 GOOS=linux go build -o ../../dist/{{.COMMAND}} main.go
+          GOARCH=amd64 GOOS=windows go build -o ../../dist/{{.COMMAND}}.exe main.go
