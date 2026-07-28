@@ -107,12 +107,8 @@ func createBlankPage(size string) (string, error) {
 		return "", err
 	}
 
-	output, err := tool.RunCmd("ImageMagick", "convert", "-size", size, "canvas:white", blank)
-	if err != nil {
+	if _, err := tool.RunCmdLogged("ImageMagick", "convert", "-size", size, "canvas:white", blank); err != nil {
 		return "", err
-	}
-	if len(output) > 0 {
-		log.Println(output)
 	}
 
 	return blank, nil
@@ -139,18 +135,8 @@ func createPdfSignature(name string, signature []string) (string, error) {
 }
 
 func createPdf(name string, pages []string) (string, error) {
-	filename, err := filepath.Abs(name + ".pdf")
-	if err != nil {
-		return "", err
-	}
-
-	output, err := tool.RunCmd("ImageMagick", "convert", append(pages, filename)...)
-	if err != nil {
-		return "", err
-	}
-	if len(output) > 0 {
-		log.Println(output)
-	}
-
-	return filename, nil
+	// name is the signature base name; the shared helper appends nothing, so
+	// pass the ".pdf" suffix here. Behaviour matches the previous inline
+	// `convert <pages...> <name>.pdf` (now deduplicated into pkg/tool).
+	return tool.ConvertImagesToPdf(name+".pdf", pages)
 }

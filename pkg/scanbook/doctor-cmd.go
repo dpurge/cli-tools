@@ -1,7 +1,6 @@
 package scanbook
 
 import (
-	"errors"
 	"log"
 	"os"
 
@@ -9,57 +8,40 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// scanbookTools are the external tools scanbook-cli depends on, each with a
+// download URL surfaced when missing.
+var scanbookTools = []struct {
+	group   string
+	bin     string
+	install string
+}{
+	{"ImageMagick", "convert", "https://imagemagick.org/script/download.php"},
+	{"DjVuLibre", "ddjvu", "https://sourceforge.net/projects/djvu/files/"},
+	{"K2PdfOpt", "k2pdfopt", "https://www.willus.com/k2pdfopt/"},
+	{"PdfTkServer", "pdftk", "https://www.pdflabs.com/tools/pdftk-server/"},
+	{"CPDF", "cpdf", "https://github.com/coherentgraphics/cpdf-binaries/releases/tag/v2.7"},
+}
+
 var doctorCmd = &cobra.Command{
 	Use:   "doctor",
-	Short: "Doctor Cmd short description",
-	Long:  "Doctor Cmd long description",
+	Short: "Check external tools required by scanbook-cli",
+	Long:  "Check the external tools scanbook-cli depends on, reporting every one that is missing.",
 	Run: func(cmd *cobra.Command, args []string) {
-
-		magickConvert, err := config.GetToolPath("ImageMagick", "convert")
-		if err == nil {
-			log.Println("ImageMagick convert: ", magickConvert)
-		} else if errors.Is(err, os.ErrNotExist) {
-			log.Fatal("Missing ImageMagick convert: ", magickConvert, " (install: https://imagemagick.org/script/download.php)")
-		} else {
-			log.Fatal(err)
+		// Report all missing tools in one run rather than aborting at the first.
+		healthy := true
+		for _, t := range scanbookTools {
+			path, err := config.GetToolPath(t.group, t.bin)
+			if err == nil {
+				log.Printf("OK       %s %s: %s", t.group, t.bin, path)
+				continue
+			}
+			healthy = false
+			log.Printf("MISSING  %s %s (install: %s): %v", t.group, t.bin, t.install, err)
 		}
 
-		ddjvu, err := config.GetToolPath("DjVuLibre", "ddjvu")
-		if err == nil {
-			log.Println("DjVuLibre ddjvu: ", ddjvu)
-		} else if errors.Is(err, os.ErrNotExist) {
-			log.Fatal("Missing DjVuLibre ddjvu: ", ddjvu, " (install: https://sourceforge.net/projects/djvu/files/)")
-		} else {
-			log.Fatal(err)
+		if !healthy {
+			os.Exit(config.ExitCodeError)
 		}
-
-		k2pdfopt, err := config.GetToolPath("K2PdfOpt", "k2pdfopt")
-		if err == nil {
-			log.Println("K2PdfOpt command: ", k2pdfopt)
-		} else if errors.Is(err, os.ErrNotExist) {
-			log.Fatal("Missing K2PdfOpt command: ", k2pdfopt, " (install: https://www.willus.com/k2pdfopt/)")
-		} else {
-			log.Fatal(err)
-		}
-
-		pdftk, err := config.GetToolPath("PdfTkServer", "pdftk")
-		if err == nil {
-			log.Println("PdfTk command: ", pdftk)
-		} else if errors.Is(err, os.ErrNotExist) {
-			log.Fatal("Missing PdfTk command: ", pdftk, " (install: https://www.pdflabs.com/tools/pdftk-server/)")
-		} else {
-			log.Fatal(err)
-		}
-
-		cpdf, err := config.GetToolPath("CPDF", "cpdf")
-		if err == nil {
-			log.Println("CPDF command: ", cpdf)
-		} else if errors.Is(err, os.ErrNotExist) {
-			log.Fatal("Missing CPDF command: ", cpdf, " (install: https://github.com/coherentgraphics/cpdf-binaries/releases/tag/v2.7)")
-		} else {
-			log.Fatal(err)
-		}
-
 	},
 }
 

@@ -12,3 +12,38 @@ CPDF:
   cpdf: cpdf
 Typst:
   typst: typst
+
+# Optional PDF-render defaults for `ebook-cli build --format pdf`. These mirror
+# the built-in book.typ defaults; edit to taste. Every family below is
+# installed in this Docker image (verify with `ebook-cli doctor`).
+Pdf:
+  paper: a5
+  size: 12pt
+  sizeLarge: 16pt      # body size for Chinese/Arabic/Hebrew/Korean/Japanese scripts
+  margin:
+    top: 1cm
+    bottom: 1cm
+    left: 1cm
+    right: 1cm
+  font:
+    # Latin / Greek / Cyrillic
+    - Gentium
+    - Charis SIL
+    - Noto Serif
+    # Arabic
+    - Amiri
+    - Scheherazade
+    - Noto Naskh Arabic
+    - Noto Sans Arabic
+    # Hebrew
+    - Ezra SIL
+    - Frank Ruehl CLM
+    - Noto Serif Hebrew
+    - Noto Sans Hebrew
+    # Chinese, also Japanese kanji
+    - AR PL UMing
+    - AR PL UKai
+    # Korean Hangul, also Japanese kana
+    - Baekmuk Batang
+    # final catch-all
+    - Noto Sans

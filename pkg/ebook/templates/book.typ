@@ -1,68 +1,75 @@
-// book.typ — DPurge language-book Typst template
-//
-// Typography adapted from min-manual (src/lib.typ): 13pt body text,
-// page margins top:3cm/bottom:2cm/x:2cm, heading scale x2/1.6/1.4/1.3/1.2/1.1,
-// gray-header table styling, `terms` styling, justified paragraphs.
-// The manual/nexus-tools chrome (page header/footer credits, `purl`/`callout`
-// helpers, package-URL commands, etc.) is intentionally NOT reused — this
-// template is scoped to language-book rendering: title page, `#outline` TOC,
-// RTL support, and the `vocabulary`/`dialog`/`parallel` custom blocks used by
-// the Typst markdown renderer (pkg/tool/markdown).
-//
-// Self-contained: no `#import "@preview/..."`, no nexus-tools, no other
-// external package — safe to `go:embed` and `typst compile` standalone.
+// book.typ — DPurge language-book Typst template: the vocabulary/dialog/
+// parallel blocks emitted by the markdown Typst renderer (pkg/tool/markdown)
+// plus the `book` show-rule entry point. Self-contained (no imports) so it can
+// be go:embed-ed and compiled standalone.
 
-// #vocabulary(
-//   (phrase: "..", grammar: "..", transcription: "..", translation: ".."),
-//   ..
-// )
-// One row per item: phrase (+ optional grammar tag, + optional bracketed
-// transcription) on the left, translation on the right. Missing/empty fields
-// are omitted rather than rendered blank.
-//
-// Uses `grid`, NOT `table`: the document-wide `set table(...)` below styles
-// GFM content tables with a shaded header row, and a `table` here would
-// inherit it — shading/centering the first vocabulary item as a bogus header.
-// `grid` is unaffected by `set table` (as `dialog`/`parallel` already are).
+// Base multi-script stack: Typst resolves each glyph against the first family
+// that covers it, so one list spans Latin plus every script. All installed in
+// the project's Docker image.
+#let _baseFont = (
+  "Gentium", "Charis SIL", "Noto Serif",
+  "Amiri", "Scheherazade", "Noto Naskh Arabic", "Noto Sans Arabic",
+  "Ezra SIL", "Frank Ruehl CLM", "Noto Serif Hebrew", "Noto Sans Hebrew",
+  // Arphic .ttc collections index under the base name "AR PL UMing" (not the
+  // fontconfig "AR PL UMing CN"); the base face is Simplified/CN.
+  "AR PL UMing", "AR PL UKai",
+  "Baekmuk Batang",
+  "Noto Sans",
+)
+
+// Per-role vocabulary fonts, set by `book` and read by `vocabulary`. State is
+// used because `vocabulary` is a top-level function (bound by the body's
+// `#vocabulary(...)` calls), so it cannot see `book`'s parameters directly.
+#let _vocabFonts = state("vocab-fonts", (
+  header: _baseFont, transcription: _baseFont, translation: _baseFont,
+))
+
+// #vocabulary((phrase, grammar, transcription, translation), ..)
+// phrase (+ optional gray grammar tag + optional bracketed transcription), then
+// translation. grammar uses the Header font, transcription the Transcription
+// font, translation the Translation font — matching the EPUB vocabulary.css
+// roles. `context` wraps only the styled spans (not the block) so a long list
+// still page-breaks between rows. `grid` (not `table`) avoids the document-wide
+// `set table` shading the first item as a header row.
 #let vocabulary(..items) = block(width: 100%, grid(
   columns: (auto, 1fr),
-  stroke: none,
-  inset: (x: 4pt, y: 3pt),
+  column-gutter: 1em,
+  stroke: (y: 0.5pt + luma(220)),
+  align: (left + top, left + top),
+  inset: (x: 2pt, y: 4pt),
   ..items.pos().map(it => (
     {
       strong(it.at("phrase", default: ""))
-      if it.at("grammar", default: "") != "" { [ ]; text(size: 0.85em, fill: gray)[#it.at("grammar")] }
-      if it.at("transcription", default: "") != "" { [ ]; emph[\[#it.at("transcription")\]] }
+      if it.at("grammar", default: "") != "" {
+        [ ]; context text(font: _vocabFonts.get().header, size: 0.85em, fill: gray)[#it.at("grammar")]
+      }
+      if it.at("transcription", default: "") != "" {
+        [ ]; context text(font: _vocabFonts.get().transcription)[#emph[\[#it.at("transcription")\]]]
+      }
     },
-    it.at("translation", default: ""),
+    context text(font: _vocabFonts.get().translation)[#it.at("translation", default: "")],
   )).flatten()
 ))
 
-// #dialog((header: "..", content: [..]), ..)
-// One row per turn: header (speaker label) then content, side by side.
-#let dialog(..turns) = block(width: 100%, {
-  for t in turns.pos() {
-    grid(columns: (auto, 1fr), column-gutter: 0.8em,
-      strong(t.at("header", default: "")), t.at("content", default: []))
-    v(0.4em)
-  }
-})
+// #dialog((header, content), ..) — one grid so speaker labels stay aligned.
+#let dialog(..turns) = block(width: 100%, grid(
+  columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
+  ..turns.pos().map(t => (strong(t.at("header", default: "")), t.at("content", default: []))).flatten()
+))
 
-// #parallel((main: [..], secondary: [..]), ..)
-// One row per pair: main text and its secondary (e.g. translated) text side
-// by side. An empty secondary renders as an empty cell, not a crash.
-#let parallel(..rows) = block(width: 100%, {
-  for r in rows.pos() {
-    grid(columns: (1fr, 1fr), column-gutter: 1em,
-      r.at("main", default: []), r.at("secondary", default: []))
-    v(0.4em)
-  }
-})
+// #parallel((main, secondary), ..) — two columns with a faint centre rule.
+#let parallel(..rows) = block(width: 100%, grid(
+  columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em,
+  stroke: (x: 0.5pt + luma(230)),
+  ..rows.pos().map(r => (r.at("main", default: []), r.at("secondary", default: []))).flatten()
+))
 
-// #show: book.with(title: .., author: .., description: .., lang: .., dir: .., cover: ..)
-// Show-rule entry point: sets document metadata, typography, page layout,
-// then emits a title page and a heading-driven table of contents before the
-// document body.
+// #show: book.with(title, author, description, lang, dir, cover, ...)
+// paper/size/margin/font are the configurable knobs (overridable via the `Pdf`
+// config section, pkg/ebook); size-large is used for scripts the exporter marks
+// large-script (CJK/Arabic/Hebrew/Korean/Japanese). font-body/-header/
+// -transcription/-translation are per-role prefixes (parsed from the project
+// font.css by the exporter) prepended to `font`.
 #let book(
   title: none,
   author: none,
@@ -70,65 +77,83 @@
   lang: "en",
   dir: ltr,
   cover: none,
+  paper: "a5",
+  size: 12pt,
+  size-large: 16pt,
+  large-script: false,
+  // Binding-aware A5 margins (wider inner edge); page.binding follows dir, so
+  // this is correct for double-sided and RTL. Accepts a length or per-side dict.
+  margin: (inside: 1.8cm, outside: 1.4cm, top: 1.7cm, bottom: 2cm),
+  font: _baseFont,
+  font-body: (),
+  font-header: (),
+  font-transcription: (),
+  font-translation: (),
   body,
 ) = {
-  // `set document(author: none)` errors (author must be str/array), and the
-  // exporter passes "" for an absent author — normalize both to an empty
-  // author list so the template is robust called with its own defaults too.
+  let headerFont = font-header + font
+  _vocabFonts.update((
+    header: headerFont,
+    transcription: font-transcription + font,
+    translation: font-translation + font,
+  ))
+
+  // document(author:) requires str/array, never none; exporter passes "" absent.
   set document(title: title, author: if author == none or author == "" { () } else { author })
   set text(
     lang: lang,
     dir: dir,
-    size: 13pt,
-    // Latin base (TeX Gyre / Arial) plus Noto fallbacks so non-Latin
-    // scripts (Arabic, Hebrew, CJK) resolve per-glyph without a separate
-    // script parameter — Typst tries each family in order per character.
-    font: (
-      "TeX Gyre Heros", "Arial",
-      "Noto Sans Arabic", "Noto Sans Hebrew",
-      "Noto Sans CJK SC", "Noto Sans SC",
-      "Noto Sans",
-    ),
+    size: if large-script { size-large } else { size },
+    font: font-body + font,
     hyphenate: true,
   )
-  set page(margin: (top: 3cm, bottom: 2cm, x: 2cm), numbering: "1")
-  set par(justify: true)
-  // Justify body paragraphs, but NOT headings: justified large bold chapter
-  // titles produce ugly wide inter-word gaps on short lines.
-  show heading: set par(justify: false)
+  set page(paper: paper, margin: margin, numbering: "1")
+  // First-line indent marks paragraphs; `all: false` leaves the first paragraph
+  // after a heading un-indented.
+  set par(justify: true, leading: 0.7em, spacing: 0.7em, first-line-indent: (amount: 1.2em, all: false))
+  show heading: set par(justify: false, first-line-indent: 0pt)
   set terms(separator: [: ], tight: true, hanging-indent: 1em)
+  // Booktabs-style tables: horizontal rules only.
   set table(
-    stroke: gray.lighten(60%),
-    inset: 10pt,
+    stroke: (x: none, y: 0.7pt + luma(180)),
+    inset: (x: 8pt, y: 5pt),
     align: (_, y) => if y == 0 { center } else { left },
-    fill: (_, y) => if y == 0 { gray.lighten(85%) } else { none },
+    fill: (_, y) => if y == 0 { luma(235) } else { none },
   )
-  show heading.where(level: 1): set text(size: 2em)
-  show heading.where(level: 2): set text(size: 1.6em)
-  show heading.where(level: 3): set text(size: 1.4em)
-  show heading.where(level: 4): set text(size: 1.3em)
-  show heading.where(level: 5): set text(size: 1.2em)
-  show heading.where(level: 6): set text(size: 1.1em)
-  show quote.where(block: true): it => pad(x: 1em, it)
+  show heading: set block(above: 1.5em, below: 0.75em)
+  show heading: set text(font: headerFont)
+  // Heading scale tuned for A5.
+  show heading.where(level: 1): set text(size: 1.7em)
+  show heading.where(level: 2): set text(size: 1.4em)
+  show heading.where(level: 3): set text(size: 1.2em)
+  show heading.where(level: 4): set text(size: 1.1em)
+  show heading.where(level: 5): set text(size: 1.05em)
+  show heading.where(level: 6): set text(size: 1em)
+  show quote.where(block: true): it => block(inset: (left: 1em, y: 0.3em), stroke: (left: 2pt + luma(180)))[#emph(it.body)]
 
+  // Front matter: unnumbered title page, roman contents, then arabic body from
+  // 1 (so the reader-facing "page 1" is the first chapter).
+  set page(numbering: none)
   align(center + horizon, {
+    // cover may be a path string (exporter contract) or pre-built content.
     if cover != none {
-      // Accept either a path string (`cover: "path.svg"`, per the exporter
-      // contract — project.Cover resolved to an absolute image path) or
-      // pre-built content (`cover: image("path.svg")`), so a caller on
-      // either side of that contract still compiles correctly.
-      if type(cover) == str { image(cover, width: 50%) } else { cover }
-      v(1em)
+      if type(cover) == str { image(cover, width: 55%) } else { cover }
+      v(1.2em)
     }
-    text(size: 2.2em, weight: "bold", title)
-    // Treat "" like none (the exporter emits "" for absent fields) so no
-    // empty author/description line or stray spacer appears on the title page.
-    if author != none and author != "" { v(1em); text(size: 1.3em, author) }
-    if description != none and description != "" { v(2em); text(style: "italic", description) }
+    text(size: 2.4em, weight: "bold", title)
+    if author != none and author != "" { v(1.2em); text(size: 1.3em, author) }
+    if description != none and description != "" { v(1.6em); text(style: "italic", fill: luma(90%), description) }
   })
   pagebreak()
-  outline(title: [Contents])
+
+  set page(numbering: "i")
+  counter(page).update(1)
+  show outline.entry.where(level: 1): strong
+  outline(title: [Contents], indent: auto)
   pagebreak()
+
+  set page(numbering: "1")
+  counter(page).update(1)
 
   body
 }

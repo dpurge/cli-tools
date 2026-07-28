@@ -47,6 +47,7 @@ var typstRenderer = renderer.NewRenderer(renderer.WithNodeRenderers(
 // recursive calls only ever happen once the outer document's parse phase
 // has fully completed.
 func ToTypst(source []byte) ([]byte, error) {
+	source = normalizeNewlines(source)
 	doc := md.Parser().Parse(text.NewReader(source))
 	var buf bytes.Buffer
 	if err := typstRenderer.Render(&buf, source, doc); err != nil {

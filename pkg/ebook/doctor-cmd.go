@@ -22,6 +22,7 @@ var doctorCmd = &cobra.Command{
 		// configured Typst.typst path, else PATH) and then actually run, so
 		// `doctor` reports what `build --format pdf` would really find and use.
 		path, err := locateTypst()
+		typstUsable := false
 		if err != nil {
 			healthy = false
 			fmt.Fprintln(os.Stderr, "ERR  typst  not found: needed for `build --format pdf` "+
@@ -31,7 +32,35 @@ var doctorCmd = &cobra.Command{
 			healthy = false
 			fmt.Fprintf(os.Stderr, "ERR  typst  found at %s but not runnable: %v\n", path, runErr)
 		} else {
+			typstUsable = true
 			fmt.Printf("OK   typst  %s (%s)\n", path, strings.TrimSpace(out))
+		}
+
+		// Verify every font family named in the optional `Pdf.font` config is
+		// one Typst can actually see (`typst fonts`) — the same view the PDF
+		// exporter renders against. With no fonts configured there is nothing
+		// to check and the built-in default stack (book.typ) is used.
+		if fonts := config.GetPdfConfig().Font; len(fonts) > 0 {
+			var families map[string]bool
+			var ferr error
+			if !typstUsable {
+				ferr = fmt.Errorf("typst unavailable")
+			} else {
+				families, ferr = typstFontFamilies(path)
+			}
+			if ferr != nil {
+				healthy = false
+				fmt.Fprintf(os.Stderr, "ERR  font   cannot verify configured fonts: %v\n", ferr)
+			} else {
+				for _, f := range fonts {
+					if families[strings.ToLower(strings.TrimSpace(f))] {
+						fmt.Printf("OK   font   %s\n", f)
+					} else {
+						healthy = false
+						fmt.Fprintf(os.Stderr, "ERR  font   %q not found (not listed by `typst fonts`)\n", f)
+					}
+				}
+			}
 		}
 
 		if !healthy {

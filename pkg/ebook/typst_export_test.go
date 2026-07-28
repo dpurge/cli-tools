@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/dpurge/cli-tools/pkg/config"
 )
 
 // --- languageInfo (SPECS AC7: reproduce every setLanguage mapping) --------
@@ -374,6 +376,326 @@ func TestTypstExporterIntegrationTurSample(t *testing.T) {
 			n = 16
 		}
 		t.Fatalf("generated file does not start with a %%PDF header (first bytes: %q)", data[:n])
+	}
+}
+
+// --- largeScript / A5 defaults / assembled document ----------------------
+
+// showCall returns just the emitted `#show: book.with(...)` call from an
+// assembled document, dropping the template preamble. That preamble contains
+// both a commented `// #show: book.with(...)` example and doc comments that
+// mention argument names (e.g. "large-script: true"), which would otherwise
+// produce false substring matches. The real call is the only occurrence of
+// the exact marker below (newline, then the call, then a newline).
+func showCall(doc string) string {
+	marker := "\n#show: book.with(\n"
+	i := strings.Index(doc, marker)
+	if i < 0 {
+		return doc
+	}
+	return doc[i+1:]
+}
+
+// TestLargeScript covers the scripts that select book.typ's enlarged body
+// size (Chinese/Arabic/Hebrew/Korean/Japanese), the case/whitespace
+// tolerance, and the negatives (Latin, empty, unknown).
+func TestLargeScript(t *testing.T) {
+	large := []string{
+		"hans", "hant", "hani", "arab", "hebr",
+		"kore", "hang", "jpan", "hira", "kana",
+		"HANS", "Arab", " hebr ",
+	}
+	for _, s := range large {
+		if !largeScript(s) {
+			t.Errorf("largeScript(%q) = false, want true", s)
+		}
+	}
+
+	small := []string{"latn", "cyrl", "grek", "thai", "", "xyz"}
+	for _, s := range small {
+		if largeScript(s) {
+			t.Errorf("largeScript(%q) = true, want false", s)
+		}
+	}
+}
+
+// TestBookTemplateDefaults asserts the embedded book.typ carries the built-in
+// defaults the exporter falls back to when nothing is configured: A5 paper,
+// 12pt base body, the enlarged-body knob, and 1cm uniform margin. A regression
+// that drops or renames any of these (they are the config fallback) is caught
+// here.
+func TestBookTemplateDefaults(t *testing.T) {
+	for _, want := range []string{`paper: "a5"`, "size: 12pt", "size-large: 16pt", "large-script: false", "inside: 1.8cm, outside: 1.4cm"} {
+		if !strings.Contains(bookTemplate, want) {
+			t.Errorf("book.typ template missing expected default %q", want)
+		}
+	}
+}
+
+// TestAssembleTypstDocumentLargeScript proves the exporter emits the
+// `large-script: true` argument only for a large-script project, so the base
+// size stays in effect for Latin and the enlarged size kicks in for CJK/RTL.
+func TestAssembleTypstDocumentLargeScript(t *testing.T) {
+	arab, err := assembleTypstDocument(
+		&EBookProject{Title: "T", Script: "arab"}, "ar", "rtl", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument(arab) error = %v", err)
+	}
+	if !strings.Contains(showCall(arab), "large-script: true") {
+		t.Errorf("expected `large-script: true` for arab script, got:\n%s", showCall(arab))
+	}
+
+	latn, err := assembleTypstDocument(
+		&EBookProject{Title: "T", Script: "latn"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument(latn) error = %v", err)
+	}
+	if strings.Contains(showCall(latn), "large-script: true") {
+		t.Errorf("did not expect `large-script: true` for latn script, got:\n%s", showCall(latn))
+	}
+}
+
+// TestAssembleTypstDocumentNoConfigOverrides confirms an empty PdfConfig (the
+// no-config-file case) emits none of the override arguments, so book.typ's
+// built-in defaults remain in force and the config section stays optional.
+func TestAssembleTypstDocumentNoConfigOverrides(t *testing.T) {
+	doc, err := assembleTypstDocument(
+		&EBookProject{Title: "T", Script: "latn"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument error = %v", err)
+	}
+	call := showCall(doc)
+	for _, arg := range []string{"paper:", "size:", "size-large:", "margin:", "font:"} {
+		if strings.Contains(call, arg) {
+			t.Errorf("empty config should not emit %q, got call:\n%s", arg, call)
+		}
+	}
+}
+
+// TestAssembleTypstDocumentConfigOverrides verifies every configured Pdf.*
+// value is emitted into the book.with(...) call in the right Typst form:
+// paper/font as string literals, size/size-large as bare lengths, and margin
+// as a dict with a `rest` fallback for the unset sides.
+func TestAssembleTypstDocumentConfigOverrides(t *testing.T) {
+	cfg := config.PdfConfig{
+		Paper:     "a4",
+		Size:      "12pt",
+		SizeLarge: "18pt",
+		Margin:    config.PdfMargin{Top: "2cm", Left: "1.5cm"},
+		Font:      []string{"Amiri", "Noto Sans"},
+	}
+	doc, err := assembleTypstDocument(
+		&EBookProject{Title: "T", Script: "arab"}, "ar", "rtl", "", []string{"body"}, cfg)
+	if err != nil {
+		t.Fatalf("assembleTypstDocument error = %v", err)
+	}
+	call := showCall(doc)
+
+	wants := []string{
+		`paper: "a4"`,
+		"size: 12pt",
+		"size-large: 18pt",
+		"margin: (top: 2cm, left: 1.5cm, rest: 1.5cm)",
+		`font: ("Amiri", "Noto Sans")`,
+	}
+	for _, w := range wants {
+		if !strings.Contains(call, w) {
+			t.Errorf("expected override %q in call, got:\n%s", w, call)
+		}
+	}
+}
+
+// TestAssembleTypstDocumentRejectsBadLength ensures a malformed configured
+// length fails the build with a clear error rather than emitting broken Typst.
+func TestAssembleTypstDocumentRejectsBadLength(t *testing.T) {
+	cfg := config.PdfConfig{Size: "12"} // missing unit
+	if _, err := assembleTypstDocument(
+		&EBookProject{Title: "T"}, "en", "ltr", "", []string{"body"}, cfg); err == nil {
+		t.Error("expected an error for a unitless size, got nil")
+	}
+}
+
+// TestTypstLength covers the length validator's accepted units and rejects.
+func TestTypstLength(t *testing.T) {
+	for _, ok := range []string{"12pt", "1cm", "1.5in", "10mm", "2em", " 12pt "} {
+		if v, err := typstLength("k", ok); err != nil {
+			t.Errorf("typstLength(%q) unexpected error: %v", ok, err)
+		} else if v != strings.TrimSpace(ok) {
+			t.Errorf("typstLength(%q) = %q, want trimmed", ok, v)
+		}
+	}
+	for _, bad := range []string{"12", "pt", "12 pt", "12px", "abc", "", "-3pt"} {
+		if _, err := typstLength("k", bad); err == nil {
+			t.Errorf("typstLength(%q) expected error, got nil", bad)
+		}
+	}
+}
+
+// TestTypstMarginDict covers: no sides -> empty; some sides -> those plus a
+// `rest` default; and propagation of a bad length.
+func TestTypstMarginDict(t *testing.T) {
+	if got, err := typstMarginDict(config.PdfMargin{}); err != nil || got != "" {
+		t.Errorf("empty margin = (%q, %v), want (\"\", nil)", got, err)
+	}
+	got, err := typstMarginDict(config.PdfMargin{Top: "2cm", Right: "3mm"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "(top: 2cm, right: 3mm, rest: 1.5cm)" {
+		t.Errorf("partial margin = %q, want (top: 2cm, right: 3mm, rest: 1.5cm)", got)
+	}
+	// Binding-aware inside/outside are recognized alongside the fixed edges.
+	binding, err := typstMarginDict(config.PdfMargin{Inside: "1.8cm", Outside: "1.4cm"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if binding != "(inside: 1.8cm, outside: 1.4cm, rest: 1.5cm)" {
+		t.Errorf("binding margin = %q, want (inside: 1.8cm, outside: 1.4cm, rest: 1.5cm)", binding)
+	}
+	if _, err := typstMarginDict(config.PdfMargin{Bottom: "nope"}); err == nil {
+		t.Error("expected error for bad margin length, got nil")
+	}
+}
+
+// TestTypstFontArray covers single (trailing comma), multiple, and quote
+// escaping of family names.
+func TestTypstFontArray(t *testing.T) {
+	if got := typstFontArray([]string{"Amiri"}); got != `("Amiri",)` {
+		t.Errorf("single font = %q, want (\"Amiri\",)", got)
+	}
+	if got := typstFontArray([]string{"Amiri", "Noto Sans"}); got != `("Amiri", "Noto Sans")` {
+		t.Errorf("multi font = %q", got)
+	}
+}
+
+// --- typstLang primary-subtag (CJK PDF lang fix) --------------------------
+
+// TestTypstLang covers the BCP-47 → Typst text.lang reduction: Chinese tags
+// lose their script subtag, already-bare tags pass through unchanged.
+func TestTypstLang(t *testing.T) {
+	cases := map[string]string{
+		"zh-Hans": "zh",
+		"zh-Hant": "zh",
+		"ar":      "ar",
+		"en":      "en",
+		"zh":      "zh",
+		"":        "",
+	}
+	for in, want := range cases {
+		if got := typstLang(in); got != want {
+			t.Errorf("typstLang(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+// TestAssembleTypstDocumentCJKLang proves a Chinese project (which languageInfo
+// maps to the full tag "zh-Hans") emits a Typst-valid bare `lang: "zh"`, not
+// the "zh-Hans" that `set text(lang:)` rejects.
+func TestAssembleTypstDocumentCJKLang(t *testing.T) {
+	lang, dir := languageInfo("cmn", "hans") // -> "zh-Hans", "ltr"
+	doc, err := assembleTypstDocument(
+		&EBookProject{Title: "T", Language: "cmn", Script: "hans"},
+		lang, dir, "", []string{"你好"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument error = %v", err)
+	}
+	call := showCall(doc)
+	if !strings.Contains(call, `lang: "zh"`) {
+		t.Errorf("expected `lang: \"zh\"` in call, got:\n%s", call)
+	}
+	if strings.Contains(call, `lang: "zh-Hans"`) {
+		t.Errorf("must not emit the BCP-47 tag `lang: \"zh-Hans\"`, got:\n%s", call)
+	}
+}
+
+// TestAssembleTypstDocumentNoCoverOmitsArg confirms an empty cover (the
+// post-fix readProject value for an unset cover) emits no `cover:` argument,
+// so Typst is never handed a bogus path.
+func TestAssembleTypstDocumentNoCoverOmitsArg(t *testing.T) {
+	doc, err := assembleTypstDocument(
+		&EBookProject{Title: "T"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument error = %v", err)
+	}
+	if strings.Contains(showCall(doc), "cover:") {
+		t.Errorf("empty cover should emit no `cover:` arg, got:\n%s", showCall(doc))
+	}
+}
+
+// TestReadProjectNoCoverStaysEmpty guards the cover fix end to end: a project
+// file without a `cover:` must leave project.Cover == "" after readProject
+// (before the fix it became the project directory).
+func TestReadProjectNoCoverStaysEmpty(t *testing.T) {
+	dir := t.TempDir()
+	ymlPath := filepath.Join(dir, "ebook.yml")
+	yml := "identifier: urn:test:nocover\nfilename: out.epub\ntitle: T\n"
+	if err := os.WriteFile(ymlPath, []byte(yml), 0o644); err != nil {
+		t.Fatalf("write ebook.yml: %v", err)
+	}
+	project, err := readProject(ymlPath)
+	if err != nil {
+		t.Fatalf("readProject error = %v", err)
+	}
+	if project.Cover != "" {
+		t.Errorf("Cover = %q, want \"\" for an unset cover", project.Cover)
+	}
+}
+
+// --- font.css role parsing + role prefixes -------------------------------
+
+func TestParseFontRoles(t *testing.T) {
+	dir := t.TempDir()
+	css := `
+@font-face { font-family: "Font Header"; src: local("Helvetica"); }
+@font-face { font-family: "Font Body"; src: local("Amiri Regular"); }
+@font-face { font-family: "Font Transcription"; src: local("DejaVu Sans"); }
+@font-face { font-family: "Font Translation"; src: local("Times New Roman"); }
+`
+	path := filepath.Join(dir, "font.css")
+	if err := os.WriteFile(path, []byte(css), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := parseFontRoles([]string{filepath.Join(dir, "base.css"), path})
+	want := fontRoles{header: "Helvetica", body: "Amiri Regular", transcription: "DejaVu Sans", translation: "Times New Roman"}
+	if got != want {
+		t.Errorf("parseFontRoles = %+v, want %+v", got, want)
+	}
+
+	// No font.css among the paths => all empty.
+	if r := parseFontRoles([]string{filepath.Join(dir, "base.css")}); r != (fontRoles{}) {
+		t.Errorf("parseFontRoles(no font.css) = %+v, want zero", r)
+	}
+}
+
+func TestRoleFontPrefix(t *testing.T) {
+	// Parsed name leads, then the recommended installed fallback.
+	if got := roleFontPrefix("Helvetica", "header"); len(got) != 2 || got[0] != "Helvetica" || got[1] != "Noto Sans" {
+		t.Errorf("roleFontPrefix(parsed) = %v, want [Helvetica Noto Sans]", got)
+	}
+	// No parsed name => just the recommended fallback.
+	if got := roleFontPrefix("", "transcription"); len(got) != 1 || got[0] != "DejaVu Sans" {
+		t.Errorf("roleFontPrefix(empty) = %v, want [DejaVu Sans]", got)
+	}
+}
+
+// TestAssembleTypstDocumentRoleFonts confirms the exporter emits per-role font
+// prefixes (recommended fallback used when no font.css is configured).
+func TestAssembleTypstDocumentRoleFonts(t *testing.T) {
+	doc, err := assembleTypstDocument(
+		&EBookProject{Title: "T"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument error = %v", err)
+	}
+	call := showCall(doc)
+	for _, want := range []string{
+		`font-body: ("Gentium",)`,
+		`font-header: ("Noto Sans",)`,
+		`font-transcription: ("DejaVu Sans",)`,
+		`font-translation: ("Gentium",)`,
+	} {
+		if !strings.Contains(call, want) {
+			t.Errorf("expected %q in call, got:\n%s", want, call)
+		}
 	}
 }
 

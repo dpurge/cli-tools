@@ -53,8 +53,18 @@ var md = goldmark.New(
 	),
 )
 
+// normalizeNewlines converts CRLF (and lone CR) to LF. The custom block
+// parsers (dialog/vocabulary/parallel) split on "\n", so without this a
+// CRLF-encoded source leaves a trailing "\r" on every line and dialog
+// headers fail to match.
+func normalizeNewlines(source []byte) []byte {
+	source = bytes.ReplaceAll(source, []byte("\r\n"), []byte("\n"))
+	return bytes.ReplaceAll(source, []byte("\r"), []byte("\n"))
+}
+
 // ToHTML converts markdown source into HTML.
 func ToHTML(source []byte) ([]byte, error) {
+	source = normalizeNewlines(source)
 	var buf bytes.Buffer
 	if err := md.Convert(source, &buf); err != nil {
 		return nil, err

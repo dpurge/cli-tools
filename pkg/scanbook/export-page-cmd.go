@@ -127,14 +127,9 @@ func exportPagePdf(input string, output string) ([]string, error) {
 
 	for i, p := range pages {
 		files[i] = filepath.Join(output, fmt.Sprintf("page-%03d", p.Number))
-		out, err := tool.RunCmd("Poppler", "pdftoppm", input, files[i], "-png", "-f", fmt.Sprint(p.Number), "-singlefile", "-r", "300")
-		if err != nil {
+		if _, err := tool.RunCmdLogged("Poppler", "pdftoppm", input, files[i], "-png", "-f", fmt.Sprint(p.Number), "-singlefile", "-r", "300"); err != nil {
 			return nil, err
 		}
-		if len(out) > 0 {
-			log.Println(out)
-		}
-		// log.Println(files[i])
 	}
 
 	return files, nil

@@ -64,6 +64,66 @@ text:
 
 Chapters are CommonMark/GFM markdown plus custom blocks — `{start-vocabulary}`, `{start-dialog}`, `{start-parallel}` — rendered natively into each output format.
 
+## `scanbook-cli`
+
+Utilities for scanned-book pages. These call external tools (ImageMagick, Poppler, DjVuLibre, …) resolved via the [config](#configuration); the container image ships them.
+
+Combine a directory of scanned pages into a single PDF:
+
+```sh
+scanbook-cli pdf --input ./book-pages --output my-book              # → my-book.pdf
+scanbook-cli pdf --input ./book-pages --output my-book --format png
+```
+
+- `-i, --input` — directory of scanned pages (required).
+- `-o, --output` — output book name; `.pdf` is appended unless already present (required).
+- `-f, --format` — page-image extension to read (default `png`).
+- Pages are combined in filename order (via ImageMagick `convert`).
+
+Generate an [Internet Archive BookReader](https://github.com/internetarchive/bookreader) web viewer from an `img/` directory:
+
+```sh
+scanbook-cli web                                                      # current directory
+scanbook-cli web ./my-book --title "My Book" --author "Jane Doe" --year 2014
+```
+
+- `[directory]` — optional positional argument (default: current directory).
+- `-t/--title`, `-a/--author`, `-y/--year`, `-i/--info` — optional metadata (default empty).
+- Reads `<dir>/img/*.png` in filename order, reads each image's real pixel dimensions, and writes `index.html` + `index.js` next to `img/`, overwriting any existing ones.
+- The viewer references a sibling `../_Reader/` library and a parent `../index.html`, so the output directory is meant to sit inside that layout.
+
+Export the pages of a scanned PDF or DjVu document to image files:
+
+```sh
+scanbook-cli export-page --input ./my-book.djvu                        # → ./my-book/page-*.png
+scanbook-cli export-page --input ./my-book.pdf --output ./pages --format tiff
+```
+
+- `-i, --input` — source `.pdf` or `.djvu` file (required).
+- `-o, --output` — output directory; **must not already exist** (default: the input name without its extension).
+- `-f, --format` — image format to write (default `png`; PDF pages are rendered at 300 DPI).
+
+Impose a directory of scanned pages into printable booklet-signature PDFs:
+
+```sh
+scanbook-cli print-pdf --input ./book-pages --output my-book           # → my-book-01.pdf, my-book-02.pdf, …
+scanbook-cli print-pdf --input ./book-pages --output my-book --blank 2
+```
+
+- `-i, --input` — directory of scanned pages (required).
+- `-o, --output` — output book name; one PDF per 32-page signature is written as `<name>-NN.pdf` (required).
+- `-f, --format` — page-image extension to read (default `png`).
+- `-b, --blank` — number of leading blank pages to insert before the first page (default `0`).
+- Pages are grouped into 32-page signatures and reordered for folding into saddle-stitched booklets; a short final signature is padded with blank A5 pages.
+
+Check that the external tools are installed and resolvable:
+
+```sh
+scanbook-cli doctor
+```
+
+- Takes no flags. Reports `OK`/`MISSING` for each tool — ImageMagick `convert`, DjVuLibre `ddjvu`, K2PdfOpt `k2pdfopt`, PdfTkServer `pdftk`, CPDF `cpdf` — and exits non-zero if any is missing.
+
 ## Configuration
 
 Optional. `~/.config/cli-tools/config.yml` maps external tool names to executables (used by `scanbook-cli`, and optionally to locate `typst`):
@@ -76,6 +136,31 @@ PdfTkServer:
 ```
 
 If the file is absent the tools still run; a command that needs a specific tool reports a clear error only at that point.
+
+### PDF rendering (`Pdf:` section)
+
+Optional overrides for `build --format pdf`. Every key is optional; anything you omit keeps the built-in default (A5 page, 12pt body, 16pt for Chinese/Arabic/Hebrew/Korean/Japanese, binding-aware A5 margins, and the bundled font stack). A whole missing `Pdf:` section changes nothing.
+
+```yml
+Pdf:
+  paper: a5            # any Typst paper name (a4, us-letter, ...)
+  size: 12pt           # base body font size
+  sizeLarge: 16pt      # body size for Chinese/Arabic/Hebrew/Korean/Japanese scripts
+  margin:              # any of top/bottom/inside/outside/left/right; unset sides → 1.5cm
+    inside: 1.8cm      # binding-relative edges (follow text direction), recommended
+    outside: 1.4cm
+    top: 1.7cm
+    bottom: 2cm
+  font:                # ordered family list; replaces the default stack entirely
+    - Gentium
+    - Amiri
+    - Ezra SIL
+    - AR PL UMing
+    - Baekmuk Batang
+    - Noto Sans
+```
+
+Sizes and margins are Typst lengths (`pt`, `mm`, `cm`, `in`, `em`); a malformed value fails the build with a clear message. `ebook-cli doctor` verifies every family listed under `font:` is one Typst can actually see.
 
 ## Development
 

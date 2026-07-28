@@ -2,11 +2,8 @@ package tool
 
 import (
 	"bufio"
+	"path/filepath"
 	"strconv"
-
-	// "log"
-	// "os"
-	// "path/filepath"
 	"strings"
 )
 
@@ -31,6 +28,26 @@ type PdfPage struct {
 
 func getValue(line string, key string) string {
 	return strings.TrimSpace(strings.TrimPrefix(line, key))
+}
+
+// ConvertImagesToPdf combines image files, in the given order, into a single
+// PDF at outputPath using ImageMagick's `convert`. It returns the absolute
+// output path. The images slice is copied, not mutated.
+func ConvertImagesToPdf(outputPath string, images []string) (string, error) {
+	out, err := filepath.Abs(outputPath)
+	if err != nil {
+		return "", err
+	}
+
+	args := make([]string, 0, len(images)+1)
+	args = append(args, images...)
+	args = append(args, out)
+
+	if _, err := RunCmdLogged("ImageMagick", "convert", args...); err != nil {
+		return "", err
+	}
+
+	return out, nil
 }
 
 func GetPdfPages(document string) ([]PdfPage, error) {

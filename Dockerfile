@@ -54,10 +54,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     xmlstarlet \
     xz-utils \
-    yq \
     && rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
 
+# mikefarah yq (Go, jq-style) installed from GitHub — NOT the Debian `yq`
+# package, which is python-yq (a jq wrapper with different syntax and quoted
+# output).
 RUN curl -fsSL https://github.com/go-task/task/releases/download/v3.45.5/task_linux_amd64.deb --output /tmp/task_linux_amd64.deb \
+    && curl -fsSL https://github.com/mikefarah/yq/releases/download/v4.53.3/yq_linux_amd64 --output /usr/local/bin/yq \
+    && chmod +x /usr/local/bin/yq \
     && curl -fsSL http://ftp.pl.debian.org/debian/pool/main/c/culmus/fonts-culmus_0.140-3_all.deb --output /tmp/fonts-culmus_0.140-3_all.deb \
     && curl -fsSL http://ftp.pl.debian.org/debian/pool/main/c/culmus-fancy/fonts-culmus-fancy_0.0.20240129.1_all.deb --output /tmp/fonts-culmus-fancy_0.0.20240129.1_all.deb \
     && dpkg --install /tmp/*.deb \

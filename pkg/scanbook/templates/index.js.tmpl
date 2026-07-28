@@ -1,0 +1,41 @@
+
+function instantiateBookReader(selector, extraOptions) {
+  selector = selector || '#BookReader';
+  extraOptions = extraOptions || {};
+
+  var options = {
+    data: [
+{{- range $i, $spread := .Spreads}}
+{{- if $i}},{{end}}
+      [
+{{- range $j, $img := $spread}}
+{{- if $j}},{{end}}
+        { width: {{$img.Width}}, height: {{$img.Height}}, uri: '{{jsstr $img.URI}}' }
+{{- end}}
+      ]
+{{- end}}
+    ],
+
+    bookTitle: 'Back to the book index',
+    bookUrl: '../index.html',
+    bookUrlText: 'Book index',
+    bookUrlTitle: 'Go back to the book index',
+
+    thumbnail: '{{jsstr .Thumbnail}}',
+    metadata: [
+      {label: 'Title', value: '{{jsstr .Title}}'},
+      {label: 'Author', value: '{{jsstr .Author}}'},
+      {label: 'Year', value: '{{jsstr .Year}}'},
+      {label: 'Info', value: '{{jsstr .Info}}'},
+    ],
+
+    imagesBaseURL: '../_Reader/images/',
+    ui: 'full',
+    el: selector,
+  };
+
+  Object.assign(options, extraOptions);
+  var br = new BookReader(options);
+  br.init();
+
+}
