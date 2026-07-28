@@ -4,15 +4,17 @@ import (
 	"os"
 
 	"github.com/dpurge/cli-tools/pkg/config"
+	"github.com/dpurge/cli-tools/pkg/version"
 	"github.com/spf13/cobra"
 )
 
 var _project string
 
 var mainCmd = &cobra.Command{
-	Use:   "flashcard-cli",
-	Short: "FlashCard CLI short description",
-	Long:  "FlashCard CLI long description",
+	Use:     "flashcard-cli",
+	Short:   "FlashCard CLI short description",
+	Long:    "FlashCard CLI long description",
+	Version: version.Version,
 }
 
 func Execute() {

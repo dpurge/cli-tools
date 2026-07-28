@@ -1,4 +1,20 @@
-FROM python:3.14-slim-trixie
+# syntax=docker/dockerfile:1
+
+# ---- Stage 1: fetch the static Typst binary ----
+# Typst ships a fully static (musl, static-pie) x86_64 Linux binary, so it runs
+# on this glibc-based Debian runtime unchanged. Fetched in an isolated stage so
+# curl/xz-utils used only for the download don't linger in the final image.
+FROM debian:trixie-slim AS typst
+ARG TYPST_VERSION=0.15.1
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils \
+    && curl -fsSL -o /tmp/typst.tar.xz \
+        "https://github.com/typst/typst/releases/download/v${TYPST_VERSION}/typst-x86_64-unknown-linux-musl.tar.xz" \
+    && tar -xJf /tmp/typst.tar.xz -C /tmp \
+    && install -m 0755 /tmp/typst-x86_64-unknown-linux-musl/typst /usr/local/bin/typst \
+    && rm -rf /tmp/*
+
+# ---- Stage 2: runtime ----
+FROM debian:trixie-slim
 
 ARG VERSION=${VERSION}
 ARG BRANCH=${BRANCH}
@@ -10,8 +26,10 @@ ENV GIT_COMMIT=${COMMIT}
 
 ENV DEBIAN_FRONTEND=noninteractive TZ=Etc/UTC
 
-RUN apt update && apt install -y --no-install-recommends \
-    calibre \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    fontconfig \
     djvulibre-bin \
     ffmpeg \
     fonts-arphic-ukai \
@@ -39,15 +57,13 @@ RUN apt update && apt install -y --no-install-recommends \
     yq \
     && rm -rf /var/cache/apt/archives /var/lib/apt/lists/*
 
-RUN curl -L https://github.com/go-task/task/releases/download/v3.45.5/task_linux_amd64.deb --output /tmp/task_linux_amd64.deb \
-    && curl -L http://ftp.pl.debian.org/debian/pool/main/c/culmus/fonts-culmus_0.140-3_all.deb --output /tmp/fonts-culmus_0.140-3_all.deb \
-    && curl -L http://ftp.pl.debian.org/debian/pool/main/c/culmus-fancy/fonts-culmus-fancy_0.0.20240129.1_all.deb --output /tmp/fonts-culmus-fancy_0.0.20240129.1_all.deb \
+RUN curl -fsSL https://github.com/go-task/task/releases/download/v3.45.5/task_linux_amd64.deb --output /tmp/task_linux_amd64.deb \
+    && curl -fsSL http://ftp.pl.debian.org/debian/pool/main/c/culmus/fonts-culmus_0.140-3_all.deb --output /tmp/fonts-culmus_0.140-3_all.deb \
+    && curl -fsSL http://ftp.pl.debian.org/debian/pool/main/c/culmus-fancy/fonts-culmus-fancy_0.0.20240129.1_all.deb --output /tmp/fonts-culmus-fancy_0.0.20240129.1_all.deb \
     && dpkg --install /tmp/*.deb \
     && rm -rf /tmp/* \
-    && pip install --upgrade pip \
-    && pip install anki
+    && fc-cache -f
 
-    
     # && mkdir -p /usr/local/share/fonts/truetype/simsun \
     # && curl -L https://github.com/wuhongyi/fonts/raw/refs/heads/master/simkai.ttf --output /usr/local/share/fonts/truetype/simsun/simkai.ttf \
     # https://github.com/wuhongyi/fonts/raw/refs/heads/master/simfang.ttf
@@ -58,7 +74,9 @@ RUN curl -L https://github.com/go-task/task/releases/download/v3.45.5/task_linux
     # https://github.com/wuhongyi/fonts/raw/refs/heads/master/%E5%AE%8B%E4%BD%93-%E7%B2%97%E4%BD%93.ttf --output 宋体-粗体.ttf
     # https://github.com/wuhongyi/fonts/raw/refs/heads/master/simsun.ttc
     # https://github.com/wuhongyi/fonts/raw/refs/heads/master/uming.ttc
-    # && fc-cache -fv \
+
+# Typst binary from the fetch stage above.
+COPY --from=typst /usr/local/bin/typst /usr/local/bin/typst
 
 WORKDIR /workspace
 

@@ -4,9 +4,9 @@ go 1.25
 
 require (
 	github.com/go-shiori/go-epub v1.2.1
-	github.com/gomarkdown/markdown v0.0.0-20250810172220-2e2c11897d1a
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
+	github.com/yuin/goldmark v1.8.4
 	golang.org/x/net v0.46.0
 )
 

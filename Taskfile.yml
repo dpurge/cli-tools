@@ -10,6 +10,8 @@ vars:
     sh: git log -n 1 --format=%h
   BUILD_DATE:
     sh: date '+%Y-%m-%d'
+  VERSION:
+    sh: git describe --tags --always --dirty
   COMMANDS: |
     ebook
     flashcard
@@ -25,6 +27,14 @@ tasks:
         vars:
           COMMAND: '{{.ITEM}}-cli'
           WORKING_DIR: 'cmd/{{.ITEM}}'
+
+  test:
+    desc: Run unit tests for each command
+    cmds:
+      - for: { var: COMMANDS }
+        task: test-cmd
+        vars:
+          COMMAND: '{{.ITEM}}'
 
   package:
     desc: Build artifacts for publishing
@@ -69,6 +79,7 @@ tasks:
         - DIST_DIR
         - BUILD_DATE
         - GIT_COMMIT
+        - VERSION
     cmds:
       - cmd: echo 'Building {{.WORKING_DIR}} ...'
       - cmd: |
@@ -76,5 +87,16 @@ tasks:
             echo "Creating: {{.DIST_DIR}}"
             mkdir -p "{{.DIST_DIR}}"
           fi
-          GOARCH=amd64 GOOS=linux go build -o ../../dist/{{.COMMAND}} main.go
-          GOARCH=amd64 GOOS=windows go build -o ../../dist/{{.COMMAND}}.exe main.go
+          GOARCH=amd64 GOOS=linux go build -ldflags "-X github.com/dpurge/cli-tools/pkg/version.Version={{.VERSION}}" -o ../../dist/{{.COMMAND}} main.go
+          GOARCH=amd64 GOOS=windows go build -ldflags "-X github.com/dpurge/cli-tools/pkg/version.Version={{.VERSION}}" -o ../../dist/{{.COMMAND}}.exe main.go
+
+  test-cmd:
+    desc: Run unit tests for a command
+    internal: true
+    silent: true
+    requires:
+      vars:
+        - COMMAND
+    cmds:
+      - cmd: echo 'Testing {{.COMMAND}} ...'
+      - cmd: go test ./cmd/{{.COMMAND}}/... ./pkg/{{.COMMAND}}/...

@@ -59,6 +59,10 @@ func readProject(filename string) (*EBookProject, error) {
 		return nil, err
 	}
 
+	if project.Stylesheet.Cover, err = tool.ResolvePath(directory, project.Stylesheet.Cover, true); err != nil {
+		return nil, err
+	}
+
 	if project.Stylesheet.Section, err = tool.ResolvePath(directory, project.Stylesheet.Section, true); err != nil {
 		return nil, err
 	}

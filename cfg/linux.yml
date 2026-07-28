@@ -10,3 +10,5 @@ Poppler:
   pdftoppm: pdftoppm
 CPDF:
   cpdf: cpdf
+Typst:
+  typst: typst

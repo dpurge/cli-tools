@@ -21,18 +21,24 @@ builds:
   goarch: [amd64]
   binary: ebook-cli
   main: ./cmd/ebook
+  ldflags:
+    - -s -w -X github.com/dpurge/cli-tools/pkg/version.Version={{.Version}}
 
 - id: flashcard-cli
   goos: [linux, windows]
   goarch: [amd64]
   binary: flashcard-cli
   main: ./cmd/flashcard
+  ldflags:
+    - -s -w -X github.com/dpurge/cli-tools/pkg/version.Version={{.Version}}
 
 - id: scanbook-cli
   goos: [linux, windows]
   goarch: [amd64]
   binary: scanbook-cli
   main: ./cmd/scanbook
+  ldflags:
+    - -s -w -X github.com/dpurge/cli-tools/pkg/version.Version={{.Version}}
 
 # dockers_v2:
 # - images:

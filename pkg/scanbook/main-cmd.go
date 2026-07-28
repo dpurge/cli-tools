@@ -4,15 +4,17 @@ import (
 	"os"
 
 	"github.com/dpurge/cli-tools/pkg/config"
+	"github.com/dpurge/cli-tools/pkg/version"
 	"github.com/spf13/cobra"
 )
 
 var _input, _output, _format string
 
 var mainCmd = &cobra.Command{
-	Use:   "scanbook-cli",
-	Short: "ScanBook CLI short description",
-	Long:  "ScanBook CLI long description",
+	Use:     "scanbook-cli",
+	Short:   "ScanBook CLI short description",
+	Long:    "ScanBook CLI long description",
+	Version: version.Version,
 }
 
 func Execute() {
