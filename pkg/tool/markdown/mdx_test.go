@@ -597,6 +597,75 @@ func TestToMDX_Parallel_Golden(t *testing.T) {
 	})
 }
 
+// TestToMDX_Models_Golden covers the models fence (mirrors
+// TestToMDX_Vocabulary_Golden, minus the `{grammar}` field): full-field
+// lines and every permutation of an omitted field.
+func TestToMDX_Models_Golden(t *testing.T) {
+	runMdxGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "phrase, transcription and translation",
+			input: "{start-models}\nrun [rʌn] = biec\n{end-models}\n",
+			want:  "```models lang=lat script=latn\nrun [rʌn] = biec\n```\n",
+		},
+		{
+			name:  "phrase and transcription only",
+			input: "{start-models}\nrun [rʌn]\n{end-models}\n",
+			want:  "```models lang=lat script=latn\nrun [rʌn]\n```\n",
+		},
+		{
+			name:  "phrase and translation only",
+			input: "{start-models}\nrun = biec\n{end-models}\n",
+			want:  "```models lang=lat script=latn\nrun = biec\n```\n",
+		},
+		{
+			name:  "phrase only",
+			input: "{start-models}\n再见\n{end-models}\n",
+			want:  "```models lang=lat script=latn\n再见\n```\n",
+		},
+		{
+			name: "multiple items, one per line",
+			input: "{start-models}\n" +
+				"run [rʌn] = biec\n" +
+				"walk = iść\n" +
+				"{end-models}\n",
+			want: "```models lang=lat script=latn\nrun [rʌn] = biec\nwalk = iść\n```\n",
+		},
+	})
+}
+
+// TestToMDX_Questions_Golden covers the questions fence: a question-only
+// line (no " = answer" suffix) and a question+answer line.
+func TestToMDX_Questions_Golden(t *testing.T) {
+	runMdxGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "question only, no answer",
+			input: "{start-questions}\nWhat is your name?\n{end-questions}\n",
+			want:  "```questions lang=lat script=latn\nWhat is your name?\n```\n",
+		},
+		{
+			name:  "question and answer",
+			input: "{start-questions}\nWhere are you from? = Poland\n{end-questions}\n",
+			want:  "```questions lang=lat script=latn\nWhere are you from? = Poland\n```\n",
+		},
+		{
+			name: "mixed block, multiple items",
+			input: "{start-questions}\n" +
+				"Q1\n" +
+				"Q2 = A2\n" +
+				"{end-questions}\n",
+			want: "```questions lang=lat script=latn\nQ1\nQ2 = A2\n```\n",
+		},
+	})
+}
+
 // TestToMDX_FenceWidening covers mdxFence widening the vocabulary/dialog/
 // parallel fence delimiter past a backtick run already present in the
 // (literal, unescaped) fence body (SPECS §5.1.3).
@@ -971,5 +1040,78 @@ func TestToMDX_DialogRoundTrip(t *testing.T) {
 	speaker2, content2 := portParseDialogTurn(lines[2], lines[3:6])
 	if speaker2 != "Bob" || strings.Join(content2, "\n") != "Line1\n\nLine2" {
 		t.Fatalf("turn 2 round-trip: speaker=%q content=%q, want speaker=\"Bob\" content=\"Line1\\n\\nLine2\"", speaker2, content2)
+	}
+}
+
+// TestToMDX_ModelsRoundTrip proves parse -> ToMDX fence -> re-parse is
+// idempotent for the models block: the fence body extracted from ToMDX's
+// output, re-wrapped in {start-models}...{end-models} and converted back
+// to HTML, must render identically to the original input's own HTML
+// (public-API-only proof that parseModelsItems recovers the same items).
+func TestToMDX_ModelsRoundTrip(t *testing.T) {
+	lines := []string{
+		"run [rʌn] = biec",
+		"run [rʌn]",
+		"run = biec",
+		"再见",
+	}
+	for _, line := range lines {
+		t.Run(line, func(t *testing.T) {
+			input := "{start-models}\n" + line + "\n{end-models}\n"
+
+			gotMDX, err := markdown.ToMDX([]byte(input), "lat", "latn")
+			if err != nil {
+				t.Fatalf("ToMDX(%q) unexpected error: %v", input, err)
+			}
+			body := strings.TrimPrefix(string(gotMDX), "```models lang=lat script=latn\n")
+			body = strings.TrimSuffix(body, "\n```\n")
+
+			originalHTML, err := markdown.ToHTML([]byte(input))
+			if err != nil {
+				t.Fatalf("ToHTML(%q) unexpected error: %v", input, err)
+			}
+			reparsedHTML, err := markdown.ToHTML([]byte("{start-models}\n" + body + "\n{end-models}\n"))
+			if err != nil {
+				t.Fatalf("ToHTML(%q) unexpected error: %v", body, err)
+			}
+			if string(reparsedHTML) != string(originalHTML) {
+				t.Fatalf("round-trip mismatch for %q:\n got  %q\n want %q", line, string(reparsedHTML), string(originalHTML))
+			}
+		})
+	}
+}
+
+// TestToMDX_QuestionsRoundTrip proves parse -> ToMDX fence -> re-parse is
+// idempotent for the questions block, mirroring
+// TestToMDX_ModelsRoundTrip.
+func TestToMDX_QuestionsRoundTrip(t *testing.T) {
+	lines := []string{
+		"What is your name?",
+		"Where are you from? = Poland",
+		"Q = A = B",
+	}
+	for _, line := range lines {
+		t.Run(line, func(t *testing.T) {
+			input := "{start-questions}\n" + line + "\n{end-questions}\n"
+
+			gotMDX, err := markdown.ToMDX([]byte(input), "lat", "latn")
+			if err != nil {
+				t.Fatalf("ToMDX(%q) unexpected error: %v", input, err)
+			}
+			body := strings.TrimPrefix(string(gotMDX), "```questions lang=lat script=latn\n")
+			body = strings.TrimSuffix(body, "\n```\n")
+
+			originalHTML, err := markdown.ToHTML([]byte(input))
+			if err != nil {
+				t.Fatalf("ToHTML(%q) unexpected error: %v", input, err)
+			}
+			reparsedHTML, err := markdown.ToHTML([]byte("{start-questions}\n" + body + "\n{end-questions}\n"))
+			if err != nil {
+				t.Fatalf("ToHTML(%q) unexpected error: %v", body, err)
+			}
+			if string(reparsedHTML) != string(originalHTML) {
+				t.Fatalf("round-trip mismatch for %q:\n got  %q\n want %q", line, string(reparsedHTML), string(originalHTML))
+			}
+		})
 	}
 }

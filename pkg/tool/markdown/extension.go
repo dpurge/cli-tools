@@ -43,10 +43,36 @@ func (e *parallelExtension) Extend(m goldmark.Markdown) {
 	))
 }
 
+// modelsExtension registers the models block parser and renderer.
+type modelsExtension struct{}
+
+func (e *modelsExtension) Extend(m goldmark.Markdown) {
+	m.Parser().AddOptions(parser.WithBlockParsers(
+		util.Prioritized(newModelsParser(), 130),
+	))
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(
+		util.Prioritized(&modelsRenderer{}, 130),
+	))
+}
+
+// questionsExtension registers the questions block parser and renderer.
+type questionsExtension struct{}
+
+func (e *questionsExtension) Extend(m goldmark.Markdown) {
+	m.Parser().AddOptions(parser.WithBlockParsers(
+		util.Prioritized(newQuestionsParser(), 140),
+	))
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(
+		util.Prioritized(&questionsRenderer{}, 140),
+	))
+}
+
 // Extenders wired into the shared converter (converter.go). Interlinear is
 // deliberately excluded — it remains an inactive stub (interlinear.go).
 var (
 	vocabularyExtender goldmark.Extender = &vocabularyExtension{}
 	dialogExtender     goldmark.Extender = &dialogExtension{}
 	parallelExtender   goldmark.Extender = &parallelExtension{}
+	modelsExtender     goldmark.Extender = &modelsExtension{}
+	questionsExtender  goldmark.Extender = &questionsExtension{}
 )

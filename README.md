@@ -62,7 +62,97 @@ text:
   - [section.md, 01.md, 02.md]   # [section, chapter, chapter, ...]
 ```
 
-Chapters are CommonMark/GFM markdown plus custom blocks — `{start-vocabulary}`, `{start-dialog}`, `{start-parallel}` — rendered natively into each output format.
+Chapters are CommonMark/GFM markdown plus custom blocks — `{start-vocabulary}`, `{start-dialog}`, `{start-parallel}`, `{start-models}`, `{start-questions}` — rendered natively into each output format.
+
+#### `{start-models}` ... `{end-models}`
+
+Like `{start-vocabulary}` but without a grammar tag or notes. Each line is:
+
+```
+phrase [transcription] = translation
+```
+
+`[transcription]` and ` = translation` are each optional, giving four render variants:
+
+```
+phrase only:                    run
+phrase + transcription:         run [rʌn]
+phrase + translation:           run = biec
+phrase + transcription + trans: run [rʌn] = biec
+```
+
+- **phrase only** renders as a plain line (no table/grid row).
+- **phrase + transcription** or **phrase + translation** render as a top-aligned two-column row (phrase | transcription-or-translation).
+- **phrase + transcription + translation** renders as a two-column row whose first column stacks the transcription below the phrase, top-aligned with the translation in the second column.
+
+Fonts match `{start-vocabulary}`'s roles: phrase is bold (body font), transcription is italic (`Font Transcription`), translation uses `Font Translation`.
+
+#### `{start-questions}` ... `{end-questions}`
+
+Each line is:
+
+```
+question = answer
+```
+
+` = answer` is optional — a line with no answer is a question-only line. Example:
+
+```
+{start-questions}
+What did you notice about the ending?
+Who is the narrator? = An unnamed neighbor.
+What year is it set in? = 1920s.
+{end-questions}
+```
+
+A question-only line renders as a normal paragraph (body font). Consecutive question+answer lines are grouped into one aligned two-column block (question | answer, top-aligned, body font); a question-only line flushes the current group, so a block may contain several such runs.
+
+#### EPUB stylesheets
+
+The models/questions markup needs a matching CSS bundle listed under the project's `stylesheet.common` (`epub-public`'s `src/css/main/{latn,arab,hebr,cjk}/models.css` and `questions.css` are ready-made examples — copy them into your own stylesheet set, or use them directly if your project already pulls from that repo). `cjk` is one shared bundle for Chinese/Japanese/Korean (no per-script `hans`/`hant`/`kore`/`jpan` variants). Example `models.css` (`latn`):
+
+```css
+div.models > div.models-item.paired {
+    display: table;
+    width: 100%;
+}
+div.models > div.models-item.paired > div.models-col1,
+div.models > div.models-item.paired > div.models-col2 {
+    display: table-cell;
+    vertical-align: top;
+}
+div.models span.models-phrase { font-weight: bold; }
+div.models span.models-transcription { font-family: "Font Transcription", sans-serif; font-style: italic; }
+div.models span.models-translation { font-family: "Font Translation", serif; }
+```
+
+Example `questions.css` (`latn`):
+
+```css
+div.questions { font-family: "Font Body", serif; }
+div.questions > div.questions-group {
+    display: table;
+    width: 100%;
+}
+div.questions > div.questions-group > div.questions-item.paired {
+    display: table-row;
+}
+div.questions > div.questions-group > div.questions-item.paired > div.questions-col1,
+div.questions > div.questions-group > div.questions-item.paired > div.questions-col2 {
+    display: table-cell;
+    vertical-align: top;
+}
+```
+
+The `arab`/`hebr` variants keep the same column order (no reordering under RTL) and right-align the leading column's text (`models-col1`/`questions-col1`, and the question-only paragraph) instead.
+
+#### Font roles (`font.css`)
+
+`font.css` declares each font role as an `@font-face` whose `font-family` is `Font <Role>` and whose `src: local(...)` names the real installed family for that role — `Font Header`, `Font Body`, `Font Transcription`, `Font Translation`, and (for large scripts) `Font Strong`/`Font Emphasis`. On the EPUB side that name is used directly in CSS (e.g. `font-family: "Font Header", sans-serif`); on the PDF side the same `font.css` (read from `stylesheet.common`) is parsed and each role's `local()` name is prepended to the Typst font stack, so PDF and EPUB pick up the same fonts per role. A role with no matching `@font-face` falls back to a recommended installed family (`Noto Sans` for header, `Gentium` for body/translation/strong/emphasis, `DejaVu Sans` for transcription) so an incomplete `font.css` still renders sensibly.
+
+`Font Strong`/`Font Emphasis` auto-activate only for "large scripts" — Arabic, Hebrew, CJK, Korean, Japanese, the same script set that triggers the enlarged PDF body size. Synthetic bold/italic renders poorly in these scripts, so bold (`**...**` / `<strong>`/`<b>`) and italic (`*...*` / `<em>`/`<i>`) switch to a distinct substitute font at *normal* weight/style instead of a synthetically thickened or slanted glyph; headings likewise keep `Font Header` but drop synthetic bold. Latin and other non-large scripts are unaffected — real bold/italic stays as-is. When `Font Strong`/`Font Emphasis` are undeclared, both fall back to the body font (`Gentium`), which simply drops the bold/italic distinction rather than inventing an unrelated one.
+
+The ready-made large-script EPUB bundles (`epub-public`'s `src/css/main/{arab,hebr,cjk}/`) declare `Font Strong`/`Font Emphasis` and route `strong`/`b`/`em`/`i` (and `h1`–`h3`) to them at normal weight/style; `cjk` is the one shared bundle for Chinese/Japanese/Korean. The `latn` bundle keeps real bold/italic and declares no `Font Strong`/`Font Emphasis`.
 
 ## `scanbook-cli`
 

@@ -153,6 +153,8 @@ func assembleTypstDocument(project *EBookProject, lang, dir, cover string, bodie
 		{"font-header", roles.header, "header"},
 		{"font-transcription", roles.transcription, "transcription"},
 		{"font-translation", roles.translation, "translation"},
+		{"font-strong", roles.strong, "strong"},
+		{"font-emph", roles.emph, "emphasis"},
 	} {
 		if stack := roleFontPrefix(r.parsed, r.key); len(stack) > 0 {
 			doc.WriteString("  " + r.arg + ": " + typstFontArray(stack) + ",\n")
@@ -232,16 +234,20 @@ func typstFontArray(fonts []string) string {
 // fontRoles holds the font each @font-face role in a project's font.css
 // resolves to (via its local(...) name); empty means the role is undeclared.
 type fontRoles struct {
-	header, body, transcription, translation string
+	header, body, transcription, translation, strong, emph string
 }
 
 // recommendedRoleFont is the installed Latin fallback prepended per role when
 // font.css is absent or omits it; non-Latin glyphs resolve via book.typ's stack.
+// strong/emphasis fall back to the body font, so an undeclared role drops the
+// synthetic bold/italic distinction rather than inventing an unrelated one.
 var recommendedRoleFont = map[string]string{
 	"header":        "Noto Sans",
 	"body":          "Gentium",
 	"transcription": "DejaVu Sans",
 	"translation":   "Gentium",
+	"strong":        "Gentium",
+	"emphasis":      "Gentium",
 }
 
 var (
@@ -284,6 +290,10 @@ func parseFontRoles(stylesheetPaths []string) fontRoles {
 			roles.transcription = name
 		case "font translation":
 			roles.translation = name
+		case "font strong":
+			roles.strong = name
+		case "font emphasis":
+			roles.emph = name
 		}
 	}
 	return roles

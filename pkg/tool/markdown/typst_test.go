@@ -526,6 +526,57 @@ func TestToTypst_TypographerEntities(t *testing.T) {
 	})
 }
 
+// TestToTypst_Models_Golden covers the #models(...) custom-block mapping
+// (like #vocabulary but minus the `grammar` field), including empty
+// (dropped) fields all rendering as empty string literals.
+func TestToTypst_Models_Golden(t *testing.T) {
+	runTypstGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "phrase only, other fields empty",
+			input: "{start-models}\n你好\n{end-models}\n",
+			want: "#models(\n" +
+				"  (phrase: \"你好\", transcription: \"\", translation: \"\"),\n" +
+				")\n\n",
+		},
+		{
+			name:  "phrase, transcription and translation",
+			input: "{start-models}\nrun [rʌn] = biec\n{end-models}\n",
+			want: "#models(\n" +
+				"  (phrase: \"run\", transcription: \"rʌn\", translation: \"biec\"),\n" +
+				")\n\n",
+		},
+	})
+}
+
+// TestToTypst_Questions_Golden covers the #questions(...) custom-block
+// mapping: a question-only line emits an empty `answer` string literal.
+func TestToTypst_Questions_Golden(t *testing.T) {
+	runTypstGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "question only, no answer",
+			input: "{start-questions}\nWhat is your name?\n{end-questions}\n",
+			want: "#questions(\n" +
+				"  (question: \"What is your name?\", answer: \"\"),\n" +
+				")\n\n",
+		},
+		{
+			name:  "question and answer",
+			input: "{start-questions}\nWhere are you from? = Poland\n{end-questions}\n",
+			want: "#questions(\n" +
+				"  (question: \"Where are you from?\", answer: \"Poland\"),\n" +
+				")\n\n",
+		},
+	})
+}
+
 // TestFileToTypst_ConvertsTempFile mirrors
 // TestFileToHTML_ConvertsTempFile: writes a markdown file into an
 // isolated t.TempDir() and asserts FileToTypst reads and converts it.

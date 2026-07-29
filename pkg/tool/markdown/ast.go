@@ -6,12 +6,18 @@ import (
 
 // Node kinds for the custom block types. KindInterlinear is defined for
 // completeness but never registered with the converter (see
-// interlinear.go).
+// interlinear.go). KindModels and KindQuestions are the highest ordinals
+// ever registered by this package; ALL THREE renderers (HTML, Typst, MDX)
+// MUST register a NodeRendererFunc for them, or a document containing
+// either block panics on the missing renderer (index out of range) — see
+// the identical warning on typstNodeRenderer/mdxNodeRenderer.
 var (
 	KindVocabulary  = gast.NewNodeKind("Vocabulary")
 	KindDialog      = gast.NewNodeKind("Dialog")
 	KindParallel    = gast.NewNodeKind("Parallel")
 	KindInterlinear = gast.NewNodeKind("Interlinear")
+	KindModels      = gast.NewNodeKind("Models")
+	KindQuestions   = gast.NewNodeKind("Questions")
 )
 
 // VocabularyItem is one parsed `{start-vocabulary}` line: a phrase plus its
@@ -103,5 +109,60 @@ func (n *Parallel) IsRaw() bool { return true }
 
 // Dump implements ast.Node.
 func (n *Parallel) Dump(source []byte, level int) {
+	gast.DumpHelper(n, source, level, nil, nil)
+}
+
+// ModelsItem is one parsed `{start-models}` line: a phrase plus its
+// optional transcription and translation. Like VocabularyItem, minus
+// Grammar (Cycle 1 scope: no grammar tag, no notes).
+type ModelsItem struct {
+	Phrase        string
+	Transcription string
+	Translation   string
+}
+
+// Models is the block node for a `{start-models}` ... `{end-models}`
+// block.
+type Models struct {
+	gast.BaseBlock
+
+	Items []ModelsItem
+}
+
+// Kind implements ast.Node.
+func (n *Models) Kind() gast.NodeKind { return KindModels }
+
+// IsRaw marks the block as raw; see Vocabulary.IsRaw.
+func (n *Models) IsRaw() bool { return true }
+
+// Dump implements ast.Node.
+func (n *Models) Dump(source []byte, level int) {
+	gast.DumpHelper(n, source, level, nil, nil)
+}
+
+// QuestionItem is one parsed `{start-questions}` line: a question plus its
+// optional answer. A line with no answer is a question-only line, rendered
+// in normal paragraph (body-font) style rather than as a two-column row.
+type QuestionItem struct {
+	Question string
+	Answer   string
+}
+
+// Questions is the block node for a `{start-questions}` ... `{end-questions}`
+// block.
+type Questions struct {
+	gast.BaseBlock
+
+	Items []QuestionItem
+}
+
+// Kind implements ast.Node.
+func (n *Questions) Kind() gast.NodeKind { return KindQuestions }
+
+// IsRaw marks the block as raw; see Vocabulary.IsRaw.
+func (n *Questions) IsRaw() bool { return true }
+
+// Dump implements ast.Node.
+func (n *Questions) Dump(source []byte, level int) {
 	gast.DumpHelper(n, source, level, nil, nil)
 }

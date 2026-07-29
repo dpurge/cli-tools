@@ -105,6 +105,8 @@ func (r *mdxNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer)
 	reg.Register(KindVocabulary, r.renderVocabulary)
 	reg.Register(KindDialog, r.renderDialog)
 	reg.Register(KindParallel, r.renderParallel)
+	reg.Register(KindModels, r.renderModels)
+	reg.Register(KindQuestions, r.renderQuestions)
 }
 
 // renderChildrenToBuf renders node's CHILDREN (never node itself) into a
@@ -843,6 +845,101 @@ func (r *mdxNodeRenderer) renderParallel(w util.BufWriter, source []byte, node g
 
 	io.WriteString(w, fence)
 	io.WriteString(w, "parallel lang=")
+	io.WriteString(w, r.lang)
+	io.WriteString(w, " script=")
+	io.WriteString(w, r.script)
+	io.WriteString(w, "\n")
+	io.WriteString(w, content)
+	io.WriteString(w, "\n")
+	io.WriteString(w, fence)
+	io.WriteString(w, "\n\n")
+	r.atLineStart = true
+
+	return gast.WalkContinue, nil
+}
+
+// renderModels emits the `models` fence: one line per ModelsItem,
+// "phrase[ [transcription]][ = translation]" with each bracketed part
+// omitted when its field is empty (mirrors renderVocabulary, minus the
+// `{grammar}` part). This round-trips parser.go's parseModelsItems, which
+// splits translation off at the FIRST " = " occurrence and transcription
+// at a trailing "[...]" — the field order emitted here (phrase, then
+// "[transcription]", then " = translation") inverts exactly for the
+// common case. Models has no markdown children (IsRaw, ast.go), so the
+// entire fence is written on the entering call. Fence content is LITERAL
+// — never escaped (mirrors renderVocabulary/renderParallel) — only the
+// fence delimiter itself is widened (mdxFence) past any backtick run the
+// content might contain.
+func (r *mdxNodeRenderer) renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Models)
+
+	var body strings.Builder
+	for i, item := range n.Items {
+		if i > 0 {
+			body.WriteString("\n")
+		}
+		body.WriteString(item.Phrase)
+		if item.Transcription != "" {
+			body.WriteString(" [")
+			body.WriteString(item.Transcription)
+			body.WriteString("]")
+		}
+		if item.Translation != "" {
+			body.WriteString(" = ")
+			body.WriteString(item.Translation)
+		}
+	}
+	content := body.String()
+	fence := mdxFence(content)
+
+	io.WriteString(w, fence)
+	io.WriteString(w, "models lang=")
+	io.WriteString(w, r.lang)
+	io.WriteString(w, " script=")
+	io.WriteString(w, r.script)
+	io.WriteString(w, "\n")
+	io.WriteString(w, content)
+	io.WriteString(w, "\n")
+	io.WriteString(w, fence)
+	io.WriteString(w, "\n\n")
+	r.atLineStart = true
+
+	return gast.WalkContinue, nil
+}
+
+// renderQuestions emits the `questions` fence: one line per QuestionItem,
+// "question[ = answer]" with the " = answer" part omitted for a
+// question-only line. This round-trips parser.go's parseQuestionsItems,
+// which splits at the FIRST " = " occurrence. Questions has no markdown
+// children (IsRaw, ast.go), so the entire fence is written on the entering
+// call. Fence content is LITERAL — never escaped — only the fence
+// delimiter itself is widened (mdxFence) past any backtick run the
+// content might contain.
+func (r *mdxNodeRenderer) renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Questions)
+
+	var body strings.Builder
+	for i, item := range n.Items {
+		if i > 0 {
+			body.WriteString("\n")
+		}
+		body.WriteString(item.Question)
+		if item.Answer != "" {
+			body.WriteString(" = ")
+			body.WriteString(item.Answer)
+		}
+	}
+	content := body.String()
+	fence := mdxFence(content)
+
+	io.WriteString(w, fence)
+	io.WriteString(w, "questions lang=")
 	io.WriteString(w, r.lang)
 	io.WriteString(w, " script=")
 	io.WriteString(w, r.script)

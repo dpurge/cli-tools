@@ -1,41 +1,21 @@
-// book.typ — DPurge language-book Typst template: the vocabulary/dialog/
-// parallel blocks emitted by the markdown Typst renderer (pkg/tool/markdown)
-// plus the `book` show-rule entry point. Self-contained (no imports) so it can
-// be go:embed-ed and compiled standalone.
-
-// Base multi-script stack: Typst resolves each glyph against the first family
-// that covers it, so one list spans Latin plus every script. All installed in
-// the project's Docker image.
 #let _baseFont = (
   "Gentium", "Charis SIL", "Noto Serif",
   "Amiri", "Scheherazade", "Noto Naskh Arabic", "Noto Sans Arabic",
   "Ezra SIL", "Frank Ruehl CLM", "Noto Serif Hebrew", "Noto Sans Hebrew",
-  // Arphic .ttc collections index under the base name "AR PL UMing" (not the
-  // fontconfig "AR PL UMing CN"); the base face is Simplified/CN.
   "AR PL UMing", "AR PL UKai",
   "Baekmuk Batang",
   "Noto Sans",
 )
 
-// Per-role vocabulary fonts, set by `book` and read by `vocabulary`. State is
-// used because `vocabulary` is a top-level function (bound by the body's
-// `#vocabulary(...)` calls), so it cannot see `book`'s parameters directly.
 #let _vocabFonts = state("vocab-fonts", (
   header: _baseFont, transcription: _baseFont, translation: _baseFont,
 ))
 
-// #vocabulary((phrase, grammar, transcription, translation), ..)
-// phrase (+ optional gray grammar tag + optional bracketed transcription), then
-// translation. grammar uses the Header font, transcription the Transcription
-// font, translation the Translation font — matching the EPUB vocabulary.css
-// roles. `context` wraps only the styled spans (not the block) so a long list
-// still page-breaks between rows. `grid` (not `table`) avoids the document-wide
-// `set table` shading the first item as a header row.
 #let vocabulary(..items) = block(width: 100%, grid(
   columns: (auto, 1fr),
   column-gutter: 1em,
   stroke: (y: 0.5pt + luma(220)),
-  align: (left + top, left + top),
+  align: (start + top, start + top),
   inset: (x: 2pt, y: 4pt),
   ..items.pos().map(it => (
     {
@@ -44,32 +24,75 @@
         [ ]; context text(font: _vocabFonts.get().header, size: 0.85em, fill: gray)[#it.at("grammar")]
       }
       if it.at("transcription", default: "") != "" {
-        [ ]; context text(font: _vocabFonts.get().transcription)[#emph[\[#it.at("transcription")\]]]
+        [ ]; emph[#context text(font: _vocabFonts.get().transcription)[\[#it.at("transcription")\]]]
       }
     },
     context text(font: _vocabFonts.get().translation)[#it.at("translation", default: "")],
   )).flatten()
 ))
 
-// #dialog((header, content), ..) — one grid so speaker labels stay aligned.
+#let models(..items) = block(width: 100%, grid(
+  columns: (auto, 1fr),
+  column-gutter: 1em,
+  align: (start + top, start + top),
+  inset: (x: 2pt, y: 4pt),
+  ..items.pos().map(it => {
+    let phrase = it.at("phrase", default: "")
+    let transcription = it.at("transcription", default: "")
+    let translation = it.at("translation", default: "")
+    if transcription == "" and translation == "" {
+      (grid.cell(colspan: 2, strong(phrase)),)
+    } else {
+      (
+        {
+          strong(phrase)
+          if transcription != "" and translation != "" {
+            linebreak()
+            emph[#context text(font: _vocabFonts.get().transcription)[\[#transcription\]]]
+          }
+        },
+        if translation != "" {
+          context text(font: _vocabFonts.get().translation)[#translation]
+        } else if transcription != "" {
+          emph[#context text(font: _vocabFonts.get().transcription)[\[#transcription\]]]
+        } else { [] },
+      )
+    }
+  }).flatten()
+))
+
+#let questions(..items) = {
+  let run = ()
+  for it in items.pos() {
+    let question = it.at("question", default: "")
+    let answer = it.at("answer", default: "")
+    if answer != "" {
+      run += (question, answer)
+    } else {
+      if run.len() > 0 {
+        grid(columns: (auto, 1fr), column-gutter: 1em, row-gutter: 0.5em, align: (start + top, start + top), ..run)
+        run = ()
+      }
+      question
+      parbreak()
+    }
+  }
+  if run.len() > 0 {
+    grid(columns: (auto, 1fr), column-gutter: 1em, row-gutter: 0.5em, align: (start + top, start + top), ..run)
+  }
+}
+
 #let dialog(..turns) = block(width: 100%, grid(
   columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
   ..turns.pos().map(t => (strong(t.at("header", default: "")), t.at("content", default: []))).flatten()
 ))
 
-// #parallel((main, secondary), ..) — two columns with a faint centre rule.
 #let parallel(..rows) = block(width: 100%, grid(
   columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em,
   stroke: (x: 0.5pt + luma(230)),
   ..rows.pos().map(r => (r.at("main", default: []), r.at("secondary", default: []))).flatten()
 ))
 
-// #show: book.with(title, author, description, lang, dir, cover, ...)
-// paper/size/margin/font are the configurable knobs (overridable via the `Pdf`
-// config section, pkg/ebook); size-large is used for scripts the exporter marks
-// large-script (CJK/Arabic/Hebrew/Korean/Japanese). font-body/-header/
-// -transcription/-translation are per-role prefixes (parsed from the project
-// font.css by the exporter) prepended to `font`.
 #let book(
   title: none,
   author: none,
@@ -81,24 +104,25 @@
   size: 12pt,
   size-large: 16pt,
   large-script: false,
-  // Binding-aware A5 margins (wider inner edge); page.binding follows dir, so
-  // this is correct for double-sided and RTL. Accepts a length or per-side dict.
   margin: (inside: 1.8cm, outside: 1.4cm, top: 1.7cm, bottom: 2cm),
   font: _baseFont,
   font-body: (),
   font-header: (),
   font-transcription: (),
   font-translation: (),
+  font-strong: (),
+  font-emph: (),
   body,
 ) = {
   let headerFont = font-header + font
+  let strongFont = font-strong + font
+  let emphFont = font-emph + font
   _vocabFonts.update((
     header: headerFont,
     transcription: font-transcription + font,
     translation: font-translation + font,
   ))
 
-  // document(author:) requires str/array, never none; exporter passes "" absent.
   set document(title: title, author: if author == none or author == "" { () } else { author })
   set text(
     lang: lang,
@@ -108,12 +132,9 @@
     hyphenate: true,
   )
   set page(paper: paper, margin: margin, numbering: "1")
-  // First-line indent marks paragraphs; `all: false` leaves the first paragraph
-  // after a heading un-indented.
   set par(justify: true, leading: 0.7em, spacing: 0.7em, first-line-indent: (amount: 1.2em, all: false))
   show heading: set par(justify: false, first-line-indent: 0pt)
   set terms(separator: [: ], tight: true, hanging-indent: 1em)
-  // Booktabs-style tables: horizontal rules only.
   set table(
     stroke: (x: none, y: 0.7pt + luma(180)),
     inset: (x: 8pt, y: 5pt),
@@ -122,28 +143,47 @@
   )
   show heading: set block(above: 1.5em, below: 0.75em)
   show heading: set text(font: headerFont)
-  // Heading scale tuned for A5.
   show heading.where(level: 1): set text(size: 1.7em)
   show heading.where(level: 2): set text(size: 1.4em)
   show heading.where(level: 3): set text(size: 1.2em)
   show heading.where(level: 4): set text(size: 1.1em)
   show heading.where(level: 5): set text(size: 1.05em)
   show heading.where(level: 6): set text(size: 1em)
+  show strong: it => if large-script { text(font: strongFont, weight: "regular", it.body) } else { it }
+  show emph: it => if large-script { text(font: emphFont, style: "normal", it.body) } else { it }
+  show heading: it => if large-script { set text(weight: "regular"); it } else { it }
   show quote.where(block: true): it => block(inset: (left: 1em, y: 0.3em), stroke: (left: 2pt + luma(180)))[#emph(it.body)]
 
-  // Front matter: unnumbered title page, roman contents, then arabic body from
-  // 1 (so the reader-facing "page 1" is the first chapter).
   set page(numbering: none)
-  align(center + horizon, {
-    // cover may be a path string (exporter contract) or pre-built content.
-    if cover != none {
-      if type(cover) == str { image(cover, width: 55%) } else { cover }
-      v(1.2em)
-    }
-    text(size: 2.4em, weight: "bold", title)
-    if author != none and author != "" { v(1.2em); text(size: 1.3em, author) }
-    if description != none and description != "" { v(1.6em); text(style: "italic", fill: luma(90%), description) }
-  })
+
+  if cover != none {
+    page(margin: 0pt, numbering: none, {
+      if type(cover) == str {
+        image(cover, width: 100%, height: 100%, fit: "cover")
+      } else { cover }
+    })
+  }
+
+  {
+    set par(justify: false)
+    set text(hyphenate: false)
+    align(center + horizon, {
+      if large-script {
+        text(size: 2.4em, font: strongFont, title)
+      } else {
+        text(size: 2.4em, weight: "bold", title)
+      }
+      if author != none and author != "" { v(1.2em); text(size: 1.3em, author) }
+      if description != none and description != "" {
+        v(1.6em)
+        if large-script {
+          text(font: emphFont, fill: luma(90%), description)
+        } else {
+          text(style: "italic", fill: luma(90%), description)
+        }
+      }
+    })
+  }
   pagebreak()
 
   set page(numbering: "i")

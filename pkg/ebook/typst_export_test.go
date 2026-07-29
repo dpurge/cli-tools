@@ -650,13 +650,18 @@ func TestParseFontRoles(t *testing.T) {
 @font-face { font-family: "Font Body"; src: local("Amiri Regular"); }
 @font-face { font-family: "Font Transcription"; src: local("DejaVu Sans"); }
 @font-face { font-family: "Font Translation"; src: local("Times New Roman"); }
+@font-face { font-family: "Font Strong"; src: local("Amiri Bold"); }
+@font-face { font-family: "Font Emphasis"; src: local("Amiri Slanted"); }
 `
 	path := filepath.Join(dir, "font.css")
 	if err := os.WriteFile(path, []byte(css), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	got := parseFontRoles([]string{filepath.Join(dir, "base.css"), path})
-	want := fontRoles{header: "Helvetica", body: "Amiri Regular", transcription: "DejaVu Sans", translation: "Times New Roman"}
+	want := fontRoles{
+		header: "Helvetica", body: "Amiri Regular", transcription: "DejaVu Sans", translation: "Times New Roman",
+		strong: "Amiri Bold", emph: "Amiri Slanted",
+	}
 	if got != want {
 		t.Errorf("parseFontRoles = %+v, want %+v", got, want)
 	}
@@ -676,10 +681,19 @@ func TestRoleFontPrefix(t *testing.T) {
 	if got := roleFontPrefix("", "transcription"); len(got) != 1 || got[0] != "DejaVu Sans" {
 		t.Errorf("roleFontPrefix(empty) = %v, want [DejaVu Sans]", got)
 	}
+	// strong/emphasis fall back to the body font (Gentium), dropping the
+	// synthetic bold/italic distinction when the role is undeclared.
+	if got := roleFontPrefix("", "strong"); len(got) != 1 || got[0] != "Gentium" {
+		t.Errorf("roleFontPrefix(empty, strong) = %v, want [Gentium]", got)
+	}
+	if got := roleFontPrefix("Amiri Slanted", "emphasis"); len(got) != 2 || got[0] != "Amiri Slanted" || got[1] != "Gentium" {
+		t.Errorf("roleFontPrefix(parsed, emphasis) = %v, want [Amiri Slanted Gentium]", got)
+	}
 }
 
 // TestAssembleTypstDocumentRoleFonts confirms the exporter emits per-role font
-// prefixes (recommended fallback used when no font.css is configured).
+// prefixes (recommended fallback used when no font.css is configured),
+// including the strong/emphasis substitution-font roles.
 func TestAssembleTypstDocumentRoleFonts(t *testing.T) {
 	doc, err := assembleTypstDocument(
 		&EBookProject{Title: "T"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
@@ -692,6 +706,38 @@ func TestAssembleTypstDocumentRoleFonts(t *testing.T) {
 		`font-header: ("Noto Sans",)`,
 		`font-transcription: ("DejaVu Sans",)`,
 		`font-translation: ("Gentium",)`,
+		`font-strong: ("Gentium",)`,
+		`font-emph: ("Gentium",)`,
+	} {
+		if !strings.Contains(call, want) {
+			t.Errorf("expected %q in call, got:\n%s", want, call)
+		}
+	}
+}
+
+// TestAssembleTypstDocumentRoleFontsDeclared confirms that when the project's
+// font.css declares Font Strong/Font Emphasis, the exporter emits the parsed
+// local() name prefixed ahead of the recommended (Gentium) fallback.
+func TestAssembleTypstDocumentRoleFontsDeclared(t *testing.T) {
+	dir := t.TempDir()
+	css := `
+@font-face { font-family: "Font Strong"; src: local("Amiri Bold"); }
+@font-face { font-family: "Font Emphasis"; src: local("Amiri Slanted"); }
+`
+	path := filepath.Join(dir, "font.css")
+	if err := os.WriteFile(path, []byte(css), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	project := &EBookProject{Title: "T", Stylesheet: EBookStyles{Common: []string{path}}}
+	doc, err := assembleTypstDocument(project, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument error = %v", err)
+	}
+	call := showCall(doc)
+	for _, want := range []string{
+		`font-strong: ("Amiri Bold", "Gentium")`,
+		`font-emph: ("Amiri Slanted", "Gentium")`,
 	} {
 		if !strings.Contains(call, want) {
 			t.Errorf("expected %q in call, got:\n%s", want, call)

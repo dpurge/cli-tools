@@ -20,6 +20,12 @@ var (
 
 	startParallel = []byte("{start-parallel}")
 	endParallel   = []byte("{end-parallel}")
+
+	startModels = []byte("{start-models}")
+	endModels   = []byte("{end-models}")
+
+	startQuestions = []byte("{start-questions}")
+	endQuestions   = []byte("{end-questions}")
 )
 
 // opensRawBlock reports whether the reader is positioned at a line that
@@ -303,4 +309,132 @@ func parseParallelRows(inner string) []ParallelRow {
 	}
 
 	return rows
+}
+
+// ---------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------
+
+type modelsParser struct{}
+
+func newModelsParser() parser.BlockParser { return &modelsParser{} }
+
+func (b *modelsParser) Trigger() []byte { return []byte{'{'} }
+
+func (b *modelsParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
+	if !opensRawBlock(reader, startModels, endModels) {
+		return nil, parser.NoChildren
+	}
+	return &Models{}, parser.NoChildren
+}
+
+func (b *modelsParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
+	return continueRawBlock(node, reader, endModels)
+}
+
+func (b *modelsParser) Close(node gast.Node, reader text.Reader, pc parser.Context) {
+	n := node.(*Models)
+	n.Items = parseModelsItems(rawBlockText(node, reader))
+}
+
+func (b *modelsParser) CanInterruptParagraph() bool { return true }
+func (b *modelsParser) CanAcceptIndentedLine() bool { return false }
+
+// parseModelsItems parses the dedented `{start-models}` body into items:
+// vocabulary's tail-to-head algorithm minus the `{grammar}` step. Unlike
+// vocabulary, the trailing `= translation` is split off at the FIRST
+// " = " (space-delimited) occurrence rather than the last bare "=" — a
+// model's translation is prose and may itself contain "=" (agreed
+// migration decision, mirroring parseQuestionsItems below for the same
+// reason).
+//
+// Guard (agreed migration decision, deliberately diverging from
+// vocabulary's preserved empty-phrase panic): if the `=` split leaves s
+// empty, the trailing-`]` check is skipped instead of indexing s[len(s)-1:]
+// on an empty string, and the `[` lookup is skipped entirely when no
+// matching `[` is found, so a malformed line never panics.
+func parseModelsItems(inner string) []ModelsItem {
+	var items []ModelsItem
+
+	for _, line := range strings.Split(inner, "\n") {
+		s := strings.TrimSpace(line)
+		if s == "" {
+			continue
+		}
+
+		var item ModelsItem
+
+		if i := strings.Index(s, " = "); i != -1 {
+			item.Translation = strings.TrimSpace(s[i+len(" = "):])
+			s = strings.TrimSpace(s[:i])
+		}
+		if s != "" && s[len(s)-1:] == "]" {
+			if i := strings.LastIndex(s, "["); i != -1 {
+				item.Transcription = strings.TrimSpace(s[i+1 : len(s)-1])
+				s = strings.TrimSpace(s[:i])
+			}
+		}
+		item.Phrase = s
+
+		items = append(items, item)
+	}
+
+	return items
+}
+
+// ---------------------------------------------------------------------
+// Questions
+// ---------------------------------------------------------------------
+
+type questionsParser struct{}
+
+func newQuestionsParser() parser.BlockParser { return &questionsParser{} }
+
+func (b *questionsParser) Trigger() []byte { return []byte{'{'} }
+
+func (b *questionsParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
+	if !opensRawBlock(reader, startQuestions, endQuestions) {
+		return nil, parser.NoChildren
+	}
+	return &Questions{}, parser.NoChildren
+}
+
+func (b *questionsParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
+	return continueRawBlock(node, reader, endQuestions)
+}
+
+func (b *questionsParser) Close(node gast.Node, reader text.Reader, pc parser.Context) {
+	n := node.(*Questions)
+	n.Items = parseQuestionsItems(rawBlockText(node, reader))
+}
+
+func (b *questionsParser) CanInterruptParagraph() bool { return true }
+func (b *questionsParser) CanAcceptIndentedLine() bool { return false }
+
+// parseQuestionsItems splits each dedented `{start-questions}` line at the
+// FIRST " = " (space-delimited) occurrence into question/answer: an answer
+// is prose and may itself contain "=", so splitting at the LAST occurrence
+// (vocabulary's convention) would mis-split it. A line with no " = " is a
+// question-only line (Answer stays "").
+func parseQuestionsItems(inner string) []QuestionItem {
+	var items []QuestionItem
+
+	for _, line := range strings.Split(inner, "\n") {
+		s := strings.TrimSpace(line)
+		if s == "" {
+			continue
+		}
+
+		var item QuestionItem
+		if i := strings.Index(s, " = "); i != -1 {
+			item.Question = strings.TrimSpace(s[:i])
+			item.Answer = strings.TrimSpace(s[i+len(" = "):])
+		} else {
+			item.Question = s
+		}
+
+		items = append(items, item)
+	}
+
+	return items
 }

@@ -57,6 +57,8 @@ func (r *typstNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(KindVocabulary, renderVocabularyTypst)
 	reg.Register(KindDialog, renderDialogTypst)
 	reg.Register(KindParallel, renderParallelTypst)
+	reg.Register(KindModels, renderModelsTypst)
+	reg.Register(KindQuestions, renderQuestionsTypst)
 }
 
 // renderDocumentTypst: Document walks its children with no wrapper.
@@ -527,6 +529,57 @@ func renderParallelTypst(w util.BufWriter, source []byte, node gast.Node, enteri
 			w.Write(secondaryContent)
 		}
 		io.WriteString(w, "]),\n")
+	}
+	io.WriteString(w, ")\n\n")
+
+	return gast.WalkContinue, nil
+}
+
+// renderModelsTypst emits `#models((phrase:"..", transcription:"..",
+// translation:".."), ...)`, string-escaping every field (mirrors
+// renderVocabularyTypst, minus the `grammar` field). Models has no
+// markdown children (IsRaw, ast.go), so the entire call is written on the
+// entering pass.
+func renderModelsTypst(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Models)
+
+	io.WriteString(w, "#models(\n")
+	for _, item := range n.Items {
+		io.WriteString(w, `  (phrase: "`)
+		io.WriteString(w, escapeTypstString(item.Phrase))
+		io.WriteString(w, `", transcription: "`)
+		io.WriteString(w, escapeTypstString(item.Transcription))
+		io.WriteString(w, `", translation: "`)
+		io.WriteString(w, escapeTypstString(item.Translation))
+		io.WriteString(w, "\"),\n")
+	}
+	io.WriteString(w, ")\n\n")
+
+	return gast.WalkContinue, nil
+}
+
+// renderQuestionsTypst emits `#questions((question:"..", answer:".."),
+// ...)`, string-escaping every field. Questions has no markdown children
+// (IsRaw, ast.go), so the entire call is written on the entering pass;
+// book.typ's `questions(..items)` (Cycle 1) decides per item whether to
+// render a plain paragraph (no answer) or join it into the current
+// aligned two-column run (answer present).
+func renderQuestionsTypst(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Questions)
+
+	io.WriteString(w, "#questions(\n")
+	for _, item := range n.Items {
+		io.WriteString(w, `  (question: "`)
+		io.WriteString(w, escapeTypstString(item.Question))
+		io.WriteString(w, `", answer: "`)
+		io.WriteString(w, escapeTypstString(item.Answer))
+		io.WriteString(w, "\"),\n")
 	}
 	io.WriteString(w, ")\n\n")
 

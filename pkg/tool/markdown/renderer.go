@@ -118,8 +118,149 @@ func renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bo
 	return gast.WalkContinue, nil
 }
 
-// vocabularyRenderer, dialogRenderer and parallelRenderer are thin
-// renderer.NodeRenderer adapters that register the render funcs above.
+// renderModels emits the `<div class="models">` wrapper (SPECS decision:
+// like vocabulary minus grammar/notes). Per item:
+//   - phrase only (no transcription, no translation) renders as a plain,
+//     non-tabular line ("models-item", no col1/col2 wrapper) — it is never
+//     given an empty second column.
+//   - every other combination renders as a "models-item paired" row with
+//     "models-col1"/"models-col2" wrapper divs (so CSS can lay them out as
+//     top-aligned table cells): col1 is the phrase, plus the transcription
+//     stacked BELOW it (separated by a "<br/>") only when BOTH
+//     transcription and translation are present; col2 is the translation
+//     if present, else the transcription, else empty.
+//
+// Consecutive paired items are grouped into a single "models-group" wrapper
+// (mirrors renderQuestions' "questions-group"), so CSS can lay them out as
+// ONE table and their col1/col2 widths align across items — matching the
+// Typst side, which already grids every item together (book.typ's
+// `models(..items)`). A phrase-only item flushes the current group, exactly
+// like a question-only item flushes "questions-group".
+//
+// Spans are written raw (no HTML-escaping), matching renderVocabulary.
+func renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Models)
+
+	io.WriteString(w, "<div class=\"models\">\n")
+	inGroup := false
+	for _, item := range n.Items {
+		if item.Transcription == "" && item.Translation == "" {
+			if inGroup {
+				io.WriteString(w, "</div>\n")
+				inGroup = false
+			}
+			io.WriteString(w, "<div class=\"models-item\">\n")
+			if item.Phrase != "" {
+				io.WriteString(w, "<span class=\"models-phrase\">")
+				io.WriteString(w, item.Phrase)
+				io.WriteString(w, "</span>\n")
+			}
+			io.WriteString(w, "</div>\n")
+			continue
+		}
+
+		if !inGroup {
+			io.WriteString(w, "<div class=\"models-group\">\n")
+			inGroup = true
+		}
+		io.WriteString(w, "<div class=\"models-item paired\">\n")
+		io.WriteString(w, "<div class=\"models-col1\">\n")
+		if item.Phrase != "" {
+			io.WriteString(w, "<span class=\"models-phrase\">")
+			io.WriteString(w, item.Phrase)
+			io.WriteString(w, "</span>\n")
+		}
+		if item.Transcription != "" && item.Translation != "" {
+			io.WriteString(w, "<br/>\n")
+			io.WriteString(w, "<span class=\"models-transcription\">")
+			io.WriteString(w, item.Transcription)
+			io.WriteString(w, "</span>\n")
+		}
+		io.WriteString(w, "</div>\n")
+		io.WriteString(w, "<div class=\"models-col2\">\n")
+		switch {
+		case item.Translation != "":
+			io.WriteString(w, "<span class=\"models-translation\">")
+			io.WriteString(w, item.Translation)
+			io.WriteString(w, "</span>\n")
+		case item.Transcription != "":
+			io.WriteString(w, "<span class=\"models-transcription\">")
+			io.WriteString(w, item.Transcription)
+			io.WriteString(w, "</span>\n")
+		}
+		io.WriteString(w, "</div>\n")
+		io.WriteString(w, "</div>\n")
+	}
+	if inGroup {
+		io.WriteString(w, "</div>\n")
+	}
+	io.WriteString(w, "</div>\n")
+
+	return gast.WalkContinue, nil
+}
+
+// renderQuestions emits the `<div class="questions">` wrapper. A
+// question-only item ("questions-item", no answer) renders as a plain
+// paragraph-style line, in normal body-font style; a question+answer item
+// renders as a "questions-item paired" row. Consecutive question+answer
+// items are grouped into a single "questions-group" wrapper (one shared
+// aligned two-column block per maximal run), flushed whenever a
+// question-only item or the end of the block is reached — so a mixed block
+// may contain several independent aligned runs, never one grid spanning a
+// question-only line with an empty answer column.
+func renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Questions)
+
+	io.WriteString(w, "<div class=\"questions\">\n")
+	inGroup := false
+	for _, item := range n.Items {
+		if item.Answer == "" {
+			if inGroup {
+				io.WriteString(w, "</div>\n")
+				inGroup = false
+			}
+			io.WriteString(w, "<div class=\"questions-item\">\n")
+			io.WriteString(w, "<span class=\"questions-question\">")
+			io.WriteString(w, item.Question)
+			io.WriteString(w, "</span>\n")
+			io.WriteString(w, "</div>\n")
+			continue
+		}
+
+		if !inGroup {
+			io.WriteString(w, "<div class=\"questions-group\">\n")
+			inGroup = true
+		}
+		io.WriteString(w, "<div class=\"questions-item paired\">\n")
+		io.WriteString(w, "<div class=\"questions-col1\">\n")
+		io.WriteString(w, "<span class=\"questions-question\">")
+		io.WriteString(w, item.Question)
+		io.WriteString(w, "</span>\n")
+		io.WriteString(w, "</div>\n")
+		io.WriteString(w, "<div class=\"questions-col2\">\n")
+		io.WriteString(w, "<span class=\"questions-answer\">")
+		io.WriteString(w, item.Answer)
+		io.WriteString(w, "</span>\n")
+		io.WriteString(w, "</div>\n")
+		io.WriteString(w, "</div>\n")
+	}
+	if inGroup {
+		io.WriteString(w, "</div>\n")
+	}
+	io.WriteString(w, "</div>\n")
+
+	return gast.WalkContinue, nil
+}
+
+// vocabularyRenderer, dialogRenderer, parallelRenderer, modelsRenderer and
+// questionsRenderer are thin renderer.NodeRenderer adapters that register
+// the render funcs above.
 
 type vocabularyRenderer struct{}
 
@@ -137,4 +278,16 @@ type parallelRenderer struct{}
 
 func (r *parallelRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(KindParallel, renderParallel)
+}
+
+type modelsRenderer struct{}
+
+func (r *modelsRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(KindModels, renderModels)
+}
+
+type questionsRenderer struct{}
+
+func (r *questionsRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(KindQuestions, renderQuestions)
 }

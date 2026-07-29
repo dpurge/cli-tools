@@ -51,7 +51,9 @@ func newMdxRenderer(lang, script string) renderer.Renderer {
 // the Document's TOP-LEVEL children and classifies each one —
 //
 //	Heading                        -> flush prose, emit "#"xLevel standalone
-//	Vocabulary/Dialog/Parallel      -> flush prose, emit its fence (§4.2-4.4)
+//	Vocabulary/Dialog/Parallel/
+//	Models/Questions                -> flush prose, emit its fence (§4.2-4.4,
+//	                                    models/questions mirror the same pattern)
 //	ThematicBreak                   -> flush prose, DROP (D3: the ebook's
 //	                                    own vocab/reading separator; no
 //	                                    phraseforge lesson places an <hr>
@@ -109,7 +111,7 @@ func ToMDX(source []byte, lang, script string) ([]byte, error) {
 			if err := r.Render(&out, source, n); err != nil {
 				return nil, err
 			}
-		case KindVocabulary, KindDialog, KindParallel:
+		case KindVocabulary, KindDialog, KindParallel, KindModels, KindQuestions:
 			if err := flush(); err != nil {
 				return nil, err
 			}

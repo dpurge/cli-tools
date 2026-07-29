@@ -1,0 +1,164 @@
+package markdown_test
+
+import (
+	"testing"
+
+	"github.com/dpurge/cli-tools/pkg/tool/markdown"
+)
+
+// TestToHTML_Models_Golden asserts the EXACT (byte-identical) wrapper and
+// span output for the {start-models}...{end-models} block, covering all
+// four render variants (agreed migration decision): phrase only (a plain,
+// non-tabular line); phrase+transcription; phrase+translation; and
+// phrase+transcription+translation (transcription stacked below the
+// phrase in col1). Consecutive paired items are wrapped in a single
+// "models-group" (mirrors "questions-group") so their columns align
+// across items, matching the Typst side (book.typ grids every item
+// together); a phrase-only item flushes the current group. Models content
+// is raw and unescaped, so these are golden, full-string comparisons
+// rather than substring checks.
+func TestToHTML_Models_Golden(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "phrase only",
+			input: "{start-models}\n你好\n{end-models}\n",
+			want: "<div class=\"models\">\n" +
+				"<div class=\"models-item\">\n" +
+				"<span class=\"models-phrase\">你好</span>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
+			name:  "phrase + transcription, no translation",
+			input: "{start-models}\nrun [rʌn]\n{end-models}\n",
+			want: "<div class=\"models\">\n" +
+				"<div class=\"models-group\">\n" +
+				"<div class=\"models-item paired\">\n" +
+				"<div class=\"models-col1\">\n" +
+				"<span class=\"models-phrase\">run</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-col2\">\n" +
+				"<span class=\"models-transcription\">rʌn</span>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
+			name:  "phrase + translation, no transcription",
+			input: "{start-models}\nrun = biec\n{end-models}\n",
+			want: "<div class=\"models\">\n" +
+				"<div class=\"models-group\">\n" +
+				"<div class=\"models-item paired\">\n" +
+				"<div class=\"models-col1\">\n" +
+				"<span class=\"models-phrase\">run</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-col2\">\n" +
+				"<span class=\"models-translation\">biec</span>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
+			name:  "phrase + transcription + translation: transcription stacked below phrase in col1",
+			input: "{start-models}\nrun [rʌn] = biec\n{end-models}\n",
+			want: "<div class=\"models\">\n" +
+				"<div class=\"models-group\">\n" +
+				"<div class=\"models-item paired\">\n" +
+				"<div class=\"models-col1\">\n" +
+				"<span class=\"models-phrase\">run</span>\n" +
+				"<br/>\n" +
+				"<span class=\"models-transcription\">rʌn</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-col2\">\n" +
+				"<span class=\"models-translation\">biec</span>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
+			name: "multiple items, mixed variants: a solo phrase followed by a run of two paired items sharing one group",
+			input: "{start-models}\n" +
+				"你好\n" +
+				"run [rʌn]\n" +
+				"run = biec\n" +
+				"{end-models}\n",
+			want: "<div class=\"models\">\n" +
+				"<div class=\"models-item\">\n" +
+				"<span class=\"models-phrase\">你好</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-group\">\n" +
+				"<div class=\"models-item paired\">\n" +
+				"<div class=\"models-col1\">\n" +
+				"<span class=\"models-phrase\">run</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-col2\">\n" +
+				"<span class=\"models-transcription\">rʌn</span>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"<div class=\"models-item paired\">\n" +
+				"<div class=\"models-col1\">\n" +
+				"<span class=\"models-phrase\">run</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-col2\">\n" +
+				"<span class=\"models-translation\">biec</span>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
+			name: "a phrase-only item breaks the group, like a Q-only line breaks questions-group",
+			input: "{start-models}\n" +
+				"run [rʌn] = biec\n" +
+				"再见\n" +
+				"walk = iść\n" +
+				"{end-models}\n",
+			want: "<div class=\"models\">\n" +
+				"<div class=\"models-group\">\n" +
+				"<div class=\"models-item paired\">\n" +
+				"<div class=\"models-col1\">\n" +
+				"<span class=\"models-phrase\">run</span>\n" +
+				"<br/>\n" +
+				"<span class=\"models-transcription\">rʌn</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-col2\">\n" +
+				"<span class=\"models-translation\">biec</span>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"<div class=\"models-item\">\n" +
+				"<span class=\"models-phrase\">再见</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-group\">\n" +
+				"<div class=\"models-item paired\">\n" +
+				"<div class=\"models-col1\">\n" +
+				"<span class=\"models-phrase\">walk</span>\n" +
+				"</div>\n" +
+				"<div class=\"models-col2\">\n" +
+				"<span class=\"models-translation\">iść</span>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := markdown.ToHTML([]byte(tc.input))
+			if err != nil {
+				t.Fatalf("ToHTML() unexpected error: %v", err)
+			}
+			if string(got) != tc.want {
+				t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), tc.want)
+			}
+		})
+	}
+}
