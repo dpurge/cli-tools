@@ -18,7 +18,8 @@ type EBookProject struct {
 	Script      string      `yaml:"script,omitempty"`
 	Cover       string      `yaml:"cover,omitempty"`
 	Description string      `yaml:"description,omitempty"`
-	Stylesheet  EBookStyles `yaml:"stylesheet,omitempty"`
+	ContentsTitle string      `yaml:"contents-title,omitempty"`
+	Stylesheet    EBookStyles `yaml:"stylesheet,omitempty"`
 	Font        []string    `yaml:"font,omitempty"`
 	Image       []string    `yaml:"image,omitempty"`
 	Text        [][]string  `yaml:"text,omitempty"`

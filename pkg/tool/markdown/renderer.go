@@ -21,8 +21,14 @@ func renderVocabulary(w util.BufWriter, source []byte, node gast.Node, entering 
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Vocabulary)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
-	io.WriteString(w, "<div class=\"vocabulary\">\n")
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "<div class=\"vocabulary\" dir=\"")
+	io.WriteString(w, dir)
+	io.WriteString(w, "\">\n")
 	for _, item := range n.Items {
 		io.WriteString(w, "<div class=\"vocabulary-item\">\n")
 		if item.Phrase != "" {
@@ -31,17 +37,17 @@ func renderVocabulary(w util.BufWriter, source []byte, node gast.Node, entering 
 			io.WriteString(w, "</span>\n")
 		}
 		if item.Grammar != "" {
-			io.WriteString(w, "<span class=\"vocabulary-grammar\">")
+			io.WriteString(w, "<span class=\"vocabulary-grammar\" dir=\"ltr\">")
 			io.WriteString(w, item.Grammar)
 			io.WriteString(w, "</span>\n")
 		}
 		if item.Transcription != "" {
-			io.WriteString(w, "<span class=\"vocabulary-transcription\">")
+			io.WriteString(w, "<span class=\"vocabulary-transcription\" dir=\"ltr\">")
 			io.WriteString(w, item.Transcription)
 			io.WriteString(w, "</span>\n")
 		}
 		if item.Translation != "" {
-			io.WriteString(w, "<span class=\"vocabulary-translation\">")
+			io.WriteString(w, "<span class=\"vocabulary-translation\" dir=\"ltr\">")
 			io.WriteString(w, item.Translation)
 			io.WriteString(w, "</span>\n")
 		}
@@ -66,7 +72,10 @@ func renderDialog(w util.BufWriter, source []byte, node gast.Node, entering bool
 		return gast.WalkStop, n.Err
 	}
 
-	io.WriteString(w, "<div class=\"dialog\">\n")
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "<div class=\"dialog\" dir=\"")
+	io.WriteString(w, dir)
+	io.WriteString(w, "\">\n")
 	for _, item := range n.Items {
 		content, err := ToHTML([]byte(item.Content))
 		if err != nil {
@@ -89,6 +98,9 @@ func renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bo
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Parallel)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
 	io.WriteString(w, "<div class=\"parallel\">\n")
 	for _, row := range n.Rows {
@@ -107,7 +119,9 @@ func renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bo
 			if err != nil {
 				return gast.WalkStop, err
 			}
-			io.WriteString(w, "<div class=\"parallel-cell secondary\">\n")
+			io.WriteString(w, "<div class=\"parallel-cell secondary\" dir=\"")
+			io.WriteString(w, blockDirection(n.Script))
+			io.WriteString(w, "\">\n")
 			w.Write(content)
 			io.WriteString(w, "\n</div>\n")
 		}
@@ -143,8 +157,14 @@ func renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Models)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
-	io.WriteString(w, "<div class=\"models\">\n")
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "<div class=\"models\" dir=\"")
+	io.WriteString(w, dir)
+	io.WriteString(w, "\">\n")
 	inGroup := false
 	for _, item := range n.Items {
 		if item.Transcription == "" && item.Translation == "" {
@@ -175,7 +195,7 @@ func renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool
 		}
 		if item.Transcription != "" && item.Translation != "" {
 			io.WriteString(w, "<br/>\n")
-			io.WriteString(w, "<span class=\"models-transcription\">")
+			io.WriteString(w, "<span class=\"models-transcription\" dir=\"ltr\">")
 			io.WriteString(w, item.Transcription)
 			io.WriteString(w, "</span>\n")
 		}
@@ -183,11 +203,11 @@ func renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool
 		io.WriteString(w, "<div class=\"models-col2\">\n")
 		switch {
 		case item.Translation != "":
-			io.WriteString(w, "<span class=\"models-translation\">")
+			io.WriteString(w, "<span class=\"models-translation\" dir=\"ltr\">")
 			io.WriteString(w, item.Translation)
 			io.WriteString(w, "</span>\n")
 		case item.Transcription != "":
-			io.WriteString(w, "<span class=\"models-transcription\">")
+			io.WriteString(w, "<span class=\"models-transcription\" dir=\"ltr\">")
 			io.WriteString(w, item.Transcription)
 			io.WriteString(w, "</span>\n")
 		}
@@ -216,8 +236,14 @@ func renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering b
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Questions)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
-	io.WriteString(w, "<div class=\"questions\">\n")
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "<div class=\"questions\" dir=\"")
+	io.WriteString(w, dir)
+	io.WriteString(w, "\">\n")
 	inGroup := false
 	for _, item := range n.Items {
 		if item.Answer == "" {
@@ -258,9 +284,52 @@ func renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering b
 	return gast.WalkContinue, nil
 }
 
-// vocabularyRenderer, dialogRenderer, parallelRenderer, modelsRenderer and
-// questionsRenderer are thin renderer.NodeRenderer adapters that register
-// the render funcs above.
+// renderTextblock emits `<div class="<cls>" dir="<dir>">` for the Text block
+// (SPECS §7.1, §9.1, M3). CSS class mapping: as=source → "text",
+// transcription/translation/grammar → their own name (OI-8). Direction rule
+// (D9): as=transcription pinned ltr; source/translation/grammar derive
+// direction from the block's own script. The Raw inner markdown is recursed
+// through ToHTML. No inline CSS is emitted — centering and table styling
+// live in the M5 CSS bundle, consuming the emitted class + dir.
+func renderTextblock(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Text)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+	as := n.As
+	if as == "" {
+		as = "source"
+	}
+	cls := as
+	if as == "source" {
+		cls = "text"
+	}
+	dir := blockDirection(n.Script)
+	if as == "transcription" {
+		dir = "ltr"
+	}
+	io.WriteString(w, "<div class=\"")
+	io.WriteString(w, cls)
+	io.WriteString(w, "\" dir=\"")
+	io.WriteString(w, dir)
+	io.WriteString(w, "\">\n")
+	if n.Raw != "" {
+		content, err := ToHTML([]byte(n.Raw))
+		if err != nil {
+			return gast.WalkStop, err
+		}
+		w.Write(content)
+	}
+	io.WriteString(w, "</div>\n")
+	return gast.WalkContinue, nil
+}
+
+// vocabularyRenderer, dialogRenderer, parallelRenderer, modelsRenderer,
+// questionsRenderer and textHTMLRenderer are thin renderer.NodeRenderer
+// adapters that register the render funcs above.
 
 type vocabularyRenderer struct{}
 
@@ -290,4 +359,13 @@ type questionsRenderer struct{}
 
 func (r *questionsRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(KindQuestions, renderQuestions)
+}
+
+// textHTMLRenderer registers the KindText HTML render func. It is wired into
+// the shared goldmark instance via textExtension (extension.go), satisfying
+// ASR-1 for the HTML path.
+type textHTMLRenderer struct{}
+
+func (r *textHTMLRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(KindText, renderTextblock)
 }

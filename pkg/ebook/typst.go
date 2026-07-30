@@ -108,6 +108,9 @@ func assembleTypstDocument(project *EBookProject, lang, dir, cover string, bodie
 	if largeScript(project.Script) {
 		doc.WriteString("  large-script: true,\n")
 	}
+	if project.ContentsTitle != "" {
+		doc.WriteString("  contents-title: " + typstStringLiteral(project.ContentsTitle) + ",\n")
+	}
 	if cover != "" {
 		doc.WriteString("  cover: " + typstStringLiteral(cover) + ",\n")
 	}

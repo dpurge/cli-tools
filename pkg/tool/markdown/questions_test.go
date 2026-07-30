@@ -22,7 +22,7 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 		{
 			name:  "question only, no answer",
 			input: "{start-questions}\nWhat is your name?\n{end-questions}\n",
-			want: "<div class=\"questions\">\n" +
+			want: "<div class=\"questions\" dir=\"ltr\">\n" +
 				"<div class=\"questions-item\">\n" +
 				"<span class=\"questions-question\">What is your name?</span>\n" +
 				"</div>\n" +
@@ -31,7 +31,7 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 		{
 			name:  "question + answer",
 			input: "{start-questions}\nWhere are you from? = Poland\n{end-questions}\n",
-			want: "<div class=\"questions\">\n" +
+			want: "<div class=\"questions\" dir=\"ltr\">\n" +
 				"<div class=\"questions-group\">\n" +
 				"<div class=\"questions-item paired\">\n" +
 				"<div class=\"questions-col1\">\n" +
@@ -52,7 +52,7 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 				"Q3 = A3\n" +
 				"Q4\n" +
 				"{end-questions}\n",
-			want: "<div class=\"questions\">\n" +
+			want: "<div class=\"questions\" dir=\"ltr\">\n" +
 				"<div class=\"questions-item\">\n" +
 				"<span class=\"questions-question\">Q1</span>\n" +
 				"</div>\n" +
@@ -82,7 +82,7 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 		{
 			name:  "answer containing '=' proves the FIRST ' = ' split, not the last",
 			input: "{start-questions}\nQ = A = B\n{end-questions}\n",
-			want: "<div class=\"questions\">\n" +
+			want: "<div class=\"questions\" dir=\"ltr\">\n" +
 				"<div class=\"questions-group\">\n" +
 				"<div class=\"questions-item paired\">\n" +
 				"<div class=\"questions-col1\">\n" +

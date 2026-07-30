@@ -112,13 +112,13 @@ func TestModels_EmptyPhraseAfterBracketSplit_NoPanic(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ToHTML() unexpected error: %v", err)
 	}
-	want := "<div class=\"models\">\n" +
+	want := "<div class=\"models\" dir=\"ltr\">\n" +
 		"<div class=\"models-group\">\n" +
 		"<div class=\"models-item paired\">\n" +
 		"<div class=\"models-col1\">\n" +
 		"</div>\n" +
 		"<div class=\"models-col2\">\n" +
-		"<span class=\"models-transcription\">abc</span>\n" +
+		"<span class=\"models-transcription\" dir=\"ltr\">abc</span>\n" +
 		"</div>\n" +
 		"</div>\n" +
 		"</div>\n" +

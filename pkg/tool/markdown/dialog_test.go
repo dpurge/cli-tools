@@ -28,7 +28,7 @@ func TestToHTML_Dialog_Golden(t *testing.T) {
 		"  你好!\n" +
 		"{end-dialog}\n"
 
-	want := "<div class=\"dialog\">\n" +
+	want := "<div class=\"dialog\" dir=\"ltr\">\n" +
 		"<div class=\"dialog-item\">\n" +
 		"<div class=\"dialog-header\">—</div>\n" +
 		"<div class=\"dialog-content\"><p>Hello there.</p>\n" +

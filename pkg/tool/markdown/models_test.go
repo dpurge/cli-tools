@@ -26,7 +26,7 @@ func TestToHTML_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase only",
 			input: "{start-models}\n你好\n{end-models}\n",
-			want: "<div class=\"models\">\n" +
+			want: "<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-item\">\n" +
 				"<span class=\"models-phrase\">你好</span>\n" +
 				"</div>\n" +
@@ -35,14 +35,14 @@ func TestToHTML_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase + transcription, no translation",
 			input: "{start-models}\nrun [rʌn]\n{end-models}\n",
-			want: "<div class=\"models\">\n" +
+			want: "<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-group\">\n" +
 				"<div class=\"models-item paired\">\n" +
 				"<div class=\"models-col1\">\n" +
 				"<span class=\"models-phrase\">run</span>\n" +
 				"</div>\n" +
 				"<div class=\"models-col2\">\n" +
-				"<span class=\"models-transcription\">rʌn</span>\n" +
+				"<span class=\"models-transcription\" dir=\"ltr\">rʌn</span>\n" +
 				"</div>\n" +
 				"</div>\n" +
 				"</div>\n" +
@@ -51,14 +51,14 @@ func TestToHTML_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase + translation, no transcription",
 			input: "{start-models}\nrun = biec\n{end-models}\n",
-			want: "<div class=\"models\">\n" +
+			want: "<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-group\">\n" +
 				"<div class=\"models-item paired\">\n" +
 				"<div class=\"models-col1\">\n" +
 				"<span class=\"models-phrase\">run</span>\n" +
 				"</div>\n" +
 				"<div class=\"models-col2\">\n" +
-				"<span class=\"models-translation\">biec</span>\n" +
+				"<span class=\"models-translation\" dir=\"ltr\">biec</span>\n" +
 				"</div>\n" +
 				"</div>\n" +
 				"</div>\n" +
@@ -67,16 +67,16 @@ func TestToHTML_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase + transcription + translation: transcription stacked below phrase in col1",
 			input: "{start-models}\nrun [rʌn] = biec\n{end-models}\n",
-			want: "<div class=\"models\">\n" +
+			want: "<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-group\">\n" +
 				"<div class=\"models-item paired\">\n" +
 				"<div class=\"models-col1\">\n" +
 				"<span class=\"models-phrase\">run</span>\n" +
 				"<br/>\n" +
-				"<span class=\"models-transcription\">rʌn</span>\n" +
+				"<span class=\"models-transcription\" dir=\"ltr\">rʌn</span>\n" +
 				"</div>\n" +
 				"<div class=\"models-col2\">\n" +
-				"<span class=\"models-translation\">biec</span>\n" +
+				"<span class=\"models-translation\" dir=\"ltr\">biec</span>\n" +
 				"</div>\n" +
 				"</div>\n" +
 				"</div>\n" +
@@ -89,7 +89,7 @@ func TestToHTML_Models_Golden(t *testing.T) {
 				"run [rʌn]\n" +
 				"run = biec\n" +
 				"{end-models}\n",
-			want: "<div class=\"models\">\n" +
+			want: "<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-item\">\n" +
 				"<span class=\"models-phrase\">你好</span>\n" +
 				"</div>\n" +
@@ -99,7 +99,7 @@ func TestToHTML_Models_Golden(t *testing.T) {
 				"<span class=\"models-phrase\">run</span>\n" +
 				"</div>\n" +
 				"<div class=\"models-col2\">\n" +
-				"<span class=\"models-transcription\">rʌn</span>\n" +
+				"<span class=\"models-transcription\" dir=\"ltr\">rʌn</span>\n" +
 				"</div>\n" +
 				"</div>\n" +
 				"<div class=\"models-item paired\">\n" +
@@ -107,7 +107,7 @@ func TestToHTML_Models_Golden(t *testing.T) {
 				"<span class=\"models-phrase\">run</span>\n" +
 				"</div>\n" +
 				"<div class=\"models-col2\">\n" +
-				"<span class=\"models-translation\">biec</span>\n" +
+				"<span class=\"models-translation\" dir=\"ltr\">biec</span>\n" +
 				"</div>\n" +
 				"</div>\n" +
 				"</div>\n" +
@@ -120,16 +120,16 @@ func TestToHTML_Models_Golden(t *testing.T) {
 				"再见\n" +
 				"walk = iść\n" +
 				"{end-models}\n",
-			want: "<div class=\"models\">\n" +
+			want: "<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-group\">\n" +
 				"<div class=\"models-item paired\">\n" +
 				"<div class=\"models-col1\">\n" +
 				"<span class=\"models-phrase\">run</span>\n" +
 				"<br/>\n" +
-				"<span class=\"models-transcription\">rʌn</span>\n" +
+				"<span class=\"models-transcription\" dir=\"ltr\">rʌn</span>\n" +
 				"</div>\n" +
 				"<div class=\"models-col2\">\n" +
-				"<span class=\"models-translation\">biec</span>\n" +
+				"<span class=\"models-translation\" dir=\"ltr\">biec</span>\n" +
 				"</div>\n" +
 				"</div>\n" +
 				"</div>\n" +
@@ -142,7 +142,7 @@ func TestToHTML_Models_Golden(t *testing.T) {
 				"<span class=\"models-phrase\">walk</span>\n" +
 				"</div>\n" +
 				"<div class=\"models-col2\">\n" +
-				"<span class=\"models-translation\">iść</span>\n" +
+				"<span class=\"models-translation\" dir=\"ltr\">iść</span>\n" +
 				"</div>\n" +
 				"</div>\n" +
 				"</div>\n" +

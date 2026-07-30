@@ -835,3 +835,62 @@ func TestReadProjectResolvesStylesheetCover(t *testing.T) {
 		t.Errorf("Stylesheet.Cover = %q, want %q", project.Stylesheet.Cover, coverCSS)
 	}
 }
+
+// --- bug fix regressions (Increment 1) ------------------------------------
+
+// TestBookTemplateColumns50_50 guards bug #2: vocabulary and models grids must
+// use (1fr, 1fr) so a long phrase does not collapse the translation column.
+// (dialog and questions Q&A grids intentionally keep (auto, 1fr) for their
+// auto-sized header/question column — only the phrase/translation split is fixed.)
+func TestBookTemplateColumns50_50(t *testing.T) {
+	count := strings.Count(bookTemplate, "columns: (1fr, 1fr)")
+	if count < 2 {
+		t.Errorf("book.typ must contain columns: (1fr, 1fr) at least twice (vocabulary + models), found %d occurrence(s)", count)
+	}
+}
+
+// TestBookTemplateQuestionsNoIndent guards bug #3: the questions function must
+// scope away the global first-line-indent so question-only lines are flush-left.
+func TestBookTemplateQuestionsNoIndent(t *testing.T) {
+	want := "set par(first-line-indent: 0pt)"
+	if !strings.Contains(bookTemplate, want) {
+		t.Errorf("book.typ questions function missing %q", want)
+	}
+}
+
+// TestBookTemplateContentsTitle guards bug #4: the book() function must accept
+// a contents-title parameter defaulting to [Contents], and use it in outline().
+func TestBookTemplateContentsTitle(t *testing.T) {
+	for _, want := range []string{
+		"contents-title: [Contents]",
+		"outline(title: contents-title,",
+	} {
+		if !strings.Contains(bookTemplate, want) {
+			t.Errorf("book.typ missing expected string %q", want)
+		}
+	}
+}
+
+// TestAssembleTypstDocumentContentsTitle covers bug #4 end to end: when
+// ContentsTitle is set, the exporter emits contents-title as a quoted string
+// literal; when unset, it is omitted so book.typ's default "Contents" stands.
+func TestAssembleTypstDocumentContentsTitle(t *testing.T) {
+	set, err := assembleTypstDocument(
+		&EBookProject{Title: "T", ContentsTitle: "Spis treści"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument(ContentsTitle set) error = %v", err)
+	}
+	wantSet := `contents-title: "Spis treści"`
+	if !strings.Contains(showCall(set), wantSet) {
+		t.Errorf("expected %q in call when ContentsTitle is set, got:\n%s", wantSet, showCall(set))
+	}
+
+	unset, err := assembleTypstDocument(
+		&EBookProject{Title: "T"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument(ContentsTitle unset) error = %v", err)
+	}
+	if strings.Contains(showCall(unset), "contents-title:") {
+		t.Errorf("must not emit contents-title: when ContentsTitle is unset, got:\n%s", showCall(unset))
+	}
+}

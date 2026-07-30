@@ -67,6 +67,21 @@ func (e *questionsExtension) Extend(m goldmark.Markdown) {
 	))
 }
 
+// textExtension registers the text block parser and its HTML node renderer.
+// Priority 150 — after questionsExtension (140). The Typst and MDX
+// renderers register KindText directly in their own RegisterFuncs
+// (typst_render.go / mdx_render.go) to satisfy ASR-1 (panic-gate).
+type textExtension struct{}
+
+func (e *textExtension) Extend(m goldmark.Markdown) {
+	m.Parser().AddOptions(parser.WithBlockParsers(
+		util.Prioritized(newTextParser(), 150),
+	))
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(
+		util.Prioritized(&textHTMLRenderer{}, 150),
+	))
+}
+
 // Extenders wired into the shared converter (converter.go). Interlinear is
 // deliberately excluded — it remains an inactive stub (interlinear.go).
 var (
@@ -75,4 +90,5 @@ var (
 	parallelExtender   goldmark.Extender = &parallelExtension{}
 	modelsExtender     goldmark.Extender = &modelsExtension{}
 	questionsExtender  goldmark.Extender = &questionsExtension{}
+	textExtender       goldmark.Extender = &textExtension{}
 )

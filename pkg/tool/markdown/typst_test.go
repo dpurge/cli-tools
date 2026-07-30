@@ -248,10 +248,11 @@ func TestToTypst_ThematicBreak(t *testing.T) {
 	})
 }
 
-// TestToTypst_Table covers #table(columns: N, align: (...), <cells>) with
+// TestToTypst_Table covers #table(columns: (1fr,...), align: (...), <cells>) with
 // all three GFM alignments plus the default (AlignNone -> Typst `auto`),
 // and confirms the header row's cells precede the body row's cells in
-// the emitted positional-argument order.
+// the emitted positional-argument order. Fractional tracks make all markdown
+// tables fill the available text width (D12 global approach).
 func TestToTypst_Table(t *testing.T) {
 	runTypstGolden(t, []struct {
 		name  string
@@ -261,12 +262,12 @@ func TestToTypst_Table(t *testing.T) {
 		{
 			name:  "left/center/right alignment, header then body cells",
 			input: "| L | C | R |\n|:--|:-:|--:|\n| a | b | c |\n",
-			want:  "#table(columns: 3, align: (left, center, right),\n[L],\n[C],\n[R],\n[a],\n[b],\n[c],\n)\n\n",
+			want:  "#table(columns: (1fr, 1fr, 1fr), align: (left, center, right),\n[L],\n[C],\n[R],\n[a],\n[b],\n[c],\n)\n\n",
 		},
 		{
 			name:  "no alignment marker maps to auto",
 			input: "| A | B |\n|---|---|\n| 1 | 2 |\n",
-			want:  "#table(columns: 2, align: (auto, auto),\n[A],\n[B],\n[1],\n[2],\n)\n\n",
+			want:  "#table(columns: (1fr, 1fr), align: (auto, auto),\n[A],\n[B],\n[1],\n[2],\n)\n\n",
 		},
 	})
 }
@@ -337,14 +338,14 @@ func TestToTypst_Vocabulary_Golden(t *testing.T) {
 		{
 			name:  "full line: phrase, grammar, transcription, translation",
 			input: "{start-vocabulary}\n你好 {noun} [nǐ hǎo] = hello\n{end-vocabulary}\n",
-			want: "#vocabulary(\n" +
+			want: "#vocabulary(dir: ltr,\n" +
 				"  (phrase: \"你好\", grammar: \"noun\", transcription: \"nǐ hǎo\", translation: \"hello\"),\n" +
 				")\n\n",
 		},
 		{
 			name:  "phrase only, other fields empty",
 			input: "{start-vocabulary}\n再见\n{end-vocabulary}\n",
-			want: "#vocabulary(\n" +
+			want: "#vocabulary(dir: ltr,\n" +
 				"  (phrase: \"再见\", grammar: \"\", transcription: \"\", translation: \"\"),\n" +
 				")\n\n",
 		},
@@ -370,7 +371,7 @@ func TestToTypst_Dialog_Golden(t *testing.T) {
 				"@Bob:\n" +
 				"  Hi!\n" +
 				"{end-dialog}\n",
-			want: "#dialog(\n" +
+			want: "#dialog(dir: ltr,\n" +
 				"  (header: \"—\", content: [Hello #strong[there]\\.\n\n]),\n" +
 				"  (header: \"Bob:\", content: [Hi!\n\n]),\n" +
 				")\n\n",
@@ -424,9 +425,23 @@ func TestToTypst_Parallel_Golden(t *testing.T) {
 				"===\n" +
 				"Row2 main only.\n" +
 				"{end-parallel}\n",
-			want: "#parallel(\n" +
+			want: "#parallel(secondary-dir: ltr,\n" +
 				"  (main: [First para\\.\n\n#line(length: 100%)\nSecond para in main\\.\n\n], secondary: [Secondary cell\\.\n\n]),\n" +
 				"  (main: [Row2 main only\\.\n\n], secondary: []),\n" +
+				")\n\n",
+		},
+		{
+			// The marker script drives the SECONDARY column's direction:
+			// script=arab (RTL) emits `secondary-dir: rtl`. The main column
+			// is unwrapped and inherits the ambient book direction in book.typ.
+			name: "script=arab emits secondary-dir: rtl",
+			input: "{start-parallel script=arab}\n" +
+				"Main.\n" +
+				"---\n" +
+				"Secondary.\n" +
+				"{end-parallel}\n",
+			want: "#parallel(secondary-dir: rtl,\n" +
+				"  (main: [Main\\.\n\n], secondary: [Secondary\\.\n\n]),\n" +
 				")\n\n",
 		},
 	})
@@ -496,7 +511,7 @@ func TestToTypst_EscapeTypstString(t *testing.T) {
 		{
 			name:  "quote and backslash escaped, markup metachars (/ .) are NOT",
 			input: "{start-vocabulary}\na\"b\\c/d.e\n{end-vocabulary}\n",
-			want: "#vocabulary(\n" +
+			want: "#vocabulary(dir: ltr,\n" +
 				"  (phrase: \"a\\\"b\\\\c/d.e\", grammar: \"\", transcription: \"\", translation: \"\"),\n" +
 				")\n\n",
 		},
@@ -538,14 +553,14 @@ func TestToTypst_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase only, other fields empty",
 			input: "{start-models}\n你好\n{end-models}\n",
-			want: "#models(\n" +
+			want: "#models(dir: ltr,\n" +
 				"  (phrase: \"你好\", transcription: \"\", translation: \"\"),\n" +
 				")\n\n",
 		},
 		{
 			name:  "phrase, transcription and translation",
 			input: "{start-models}\nrun [rʌn] = biec\n{end-models}\n",
-			want: "#models(\n" +
+			want: "#models(dir: ltr,\n" +
 				"  (phrase: \"run\", transcription: \"rʌn\", translation: \"biec\"),\n" +
 				")\n\n",
 		},
@@ -563,14 +578,14 @@ func TestToTypst_Questions_Golden(t *testing.T) {
 		{
 			name:  "question only, no answer",
 			input: "{start-questions}\nWhat is your name?\n{end-questions}\n",
-			want: "#questions(\n" +
+			want: "#questions(dir: ltr,\n" +
 				"  (question: \"What is your name?\", answer: \"\"),\n" +
 				")\n\n",
 		},
 		{
 			name:  "question and answer",
 			input: "{start-questions}\nWhere are you from? = Poland\n{end-questions}\n",
-			want: "#questions(\n" +
+			want: "#questions(dir: ltr,\n" +
 				"  (question: \"Where are you from?\", answer: \"Poland\"),\n" +
 				")\n\n",
 		},

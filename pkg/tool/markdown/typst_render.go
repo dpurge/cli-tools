@@ -3,7 +3,6 @@ package markdown
 import (
 	"bytes"
 	"io"
-	"strconv"
 	"strings"
 
 	gast "github.com/yuin/goldmark/ast"
@@ -59,6 +58,8 @@ func (r *typstNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(KindParallel, renderParallelTypst)
 	reg.Register(KindModels, renderModelsTypst)
 	reg.Register(KindQuestions, renderQuestionsTypst)
+	// KindText MUST be registered last (highest ordinal, ASR-1 panic-gate).
+	reg.Register(KindText, renderTextblockTypst)
 }
 
 // renderDocumentTypst: Document walks its children with no wrapper.
@@ -330,18 +331,25 @@ func renderThematicBreakTypst(w util.BufWriter, source []byte, node gast.Node, e
 	return gast.WalkContinue, nil
 }
 
-// renderTableTypst emits `#table(columns: N, align: (...), <cells>)`; the
-// header row and body rows are transparent wrappers (renderTableHeaderTypst
-// /renderTableRowTypst) that contribute no markup of their own, so
-// TableCell's own `[...],` entries (renderTableCellTypst) end up as the
-// table's positional arguments in document order: header cells first,
+// renderTableTypst emits `#table(columns: (1fr, 1fr, ...), align: (...), <cells>)`;
+// fractional column tracks make every markdown table fill the available text width
+// (required for grammar tables per D12; acceptable globally since tables appear only
+// in prose/text/grammar blocks in this handbook). The header row and body rows are
+// transparent wrappers (renderTableHeaderTypst/renderTableRowTypst) that contribute
+// no markup of their own, so TableCell's own `[...],` entries (renderTableCellTypst)
+// end up as the table's positional arguments in document order: header cells first,
 // then each row's cells.
 func renderTableTypst(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
 	n := node.(*extast.Table)
 	if entering {
-		io.WriteString(w, "#table(columns: ")
-		io.WriteString(w, strconv.Itoa(len(n.Alignments)))
-		io.WriteString(w, ", align: (")
+		io.WriteString(w, "#table(columns: (")
+		for i := range n.Alignments {
+			if i > 0 {
+				io.WriteString(w, ", ")
+			}
+			io.WriteString(w, "1fr")
+		}
+		io.WriteString(w, "), align: (")
 		for i, a := range n.Alignments {
 			if i > 0 {
 				io.WriteString(w, ", ")
@@ -451,8 +459,14 @@ func renderVocabularyTypst(w util.BufWriter, source []byte, node gast.Node, ente
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Vocabulary)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
-	io.WriteString(w, "#vocabulary(\n")
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "#vocabulary(dir: ")
+	io.WriteString(w, dir)
+	io.WriteString(w, ",\n")
 	for _, item := range n.Items {
 		io.WriteString(w, `  (phrase: "`)
 		io.WriteString(w, escapeTypstString(item.Phrase))
@@ -484,7 +498,10 @@ func renderDialogTypst(w util.BufWriter, source []byte, node gast.Node, entering
 		return gast.WalkStop, n.Err
 	}
 
-	io.WriteString(w, "#dialog(\n")
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "#dialog(dir: ")
+	io.WriteString(w, dir)
+	io.WriteString(w, ",\n")
 	for _, item := range n.Items {
 		content, err := ToTypst([]byte(item.Content))
 		if err != nil {
@@ -511,8 +528,14 @@ func renderParallelTypst(w util.BufWriter, source []byte, node gast.Node, enteri
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Parallel)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
-	io.WriteString(w, "#parallel(\n")
+	secondaryDir := blockDirection(n.Script)
+	io.WriteString(w, "#parallel(secondary-dir: ")
+	io.WriteString(w, secondaryDir)
+	io.WriteString(w, ",\n")
 	for _, row := range n.Rows {
 		mainContent, err := ToTypst([]byte(row.MainRaw))
 		if err != nil {
@@ -545,8 +568,14 @@ func renderModelsTypst(w util.BufWriter, source []byte, node gast.Node, entering
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Models)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
-	io.WriteString(w, "#models(\n")
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "#models(dir: ")
+	io.WriteString(w, dir)
+	io.WriteString(w, ",\n")
 	for _, item := range n.Items {
 		io.WriteString(w, `  (phrase: "`)
 		io.WriteString(w, escapeTypstString(item.Phrase))
@@ -561,6 +590,45 @@ func renderModelsTypst(w util.BufWriter, source []byte, node gast.Node, entering
 	return gast.WalkContinue, nil
 }
 
+// renderTextblockTypst emits `#textblock(role: "..", dir: <kw>, [ <body> ])`
+// (SPECS §7.1, M3). Direction rule (D9): as=transcription is pinned ltr
+// (romanization); source/translation/grammar derive direction from the
+// block's own script via blockDirection. The body is recursed through
+// ToTypst, mirroring renderDialogTypst/renderParallelTypst. The grammar
+// table full-width + source-dir rule is handled by book.typ's _sourceDir
+// state (D13) — no source-dir argument is passed here.
+func renderTextblockTypst(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Text)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+	as := n.As
+	if as == "" {
+		as = "source"
+	}
+	dir := blockDirection(n.Script)
+	if as == "transcription" {
+		dir = "ltr"
+	}
+	io.WriteString(w, "#textblock(role: \"")
+	io.WriteString(w, as)
+	io.WriteString(w, "\", dir: ")
+	io.WriteString(w, dir)
+	io.WriteString(w, ", [\n")
+	if n.Raw != "" {
+		content, err := ToTypst([]byte(n.Raw))
+		if err != nil {
+			return gast.WalkStop, err
+		}
+		w.Write(content)
+	}
+	io.WriteString(w, "])\n\n")
+	return gast.WalkContinue, nil
+}
+
 // renderQuestionsTypst emits `#questions((question:"..", answer:".."),
 // ...)`, string-escaping every field. Questions has no markdown children
 // (IsRaw, ast.go), so the entire call is written on the entering pass;
@@ -572,8 +640,14 @@ func renderQuestionsTypst(w util.BufWriter, source []byte, node gast.Node, enter
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Questions)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
-	io.WriteString(w, "#questions(\n")
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "#questions(dir: ")
+	io.WriteString(w, dir)
+	io.WriteString(w, ",\n")
 	for _, item := range n.Items {
 		io.WriteString(w, `  (question: "`)
 		io.WriteString(w, escapeTypstString(item.Question))

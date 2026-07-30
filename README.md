@@ -62,7 +62,44 @@ text:
   - [section.md, 01.md, 02.md]   # [section, chapter, chapter, ...]
 ```
 
-Chapters are CommonMark/GFM markdown plus custom blocks — `{start-vocabulary}`, `{start-dialog}`, `{start-parallel}`, `{start-models}`, `{start-questions}` — rendered natively into each output format.
+Chapters are CommonMark/GFM markdown plus custom blocks rendered natively into each output format. Block markers take `lang` (ISO 639-3) and `script` (ISO 15924) attributes; the unified `{start-text as=...}` block also takes an `as=` role. **`script` — not the book's `language` — now determines each block's text direction and font role.** This is a behavior change for existing content: a marker with no `script` renders left-to-right regardless of the book language, so right-to-left projects must set `script=` (e.g. `arab`) on their block markers.
+
+```
+{start-vocabulary lang=arb script=arab}
+كتاب {N m} [kitāb] = book
+{end-vocabulary}
+
+{start-text as=source lang=arb script=arab}
+## Heading
+
+Paragraph in the source language.
+{end-text}
+```
+
+**`script` drives direction**: `arab`, `hebr`, and `syrc` scripts → RTL; all others → LTR. The `as=transcription` role is always pinned LTR (romanization). Fonts come from the `font.css` roles already declared in your stylesheet (no per-block font configuration needed).
+
+**`{start-text as=source|transcription|translation|grammar lang=... script=...}` ... `{end-text}`**
+
+Unified text block with four roles:
+
+- `as=source` — body font, direction from `script`.
+- `as=transcription` — transcription font, pinned LTR.
+- `as=translation` — translation font, direction from `script`.
+- `as=grammar` — translation font, direction from `script` for prose; tables inside render in the source language's direction and font at full text-block width.
+
+Headings (`h1`–`h3`) inside any text block are centered, and markdown tables span the full text-block width in both outputs. For PDF the direction and font are resolved via `book.typ`'s `#textblock(role:, dir:, ...)` function; for EPUB the class (`text`, `transcription`, `translation`, `grammar`) and `dir` attribute on the wrapper `<div>` drive the matching CSS rules in your stylesheet bundle.
+
+**Block set**: `{start-vocabulary}`, `{start-models}`, `{start-questions}`, `{start-dialog}`, `{start-parallel}`, and `{start-text}` (which also takes `as=`). Validation: an unrecognized `script` value falls back to LTR (no error); an **unknown attribute key**, a **malformed attribute** (missing `=` or unterminated quote), or an **unknown `as=` value** fails the build with a message naming the offending marker.
+
+**`contents-title` project key**: set in `ebook.yml` to override the PDF outline title (default "Contents"):
+
+```yml
+contents-title: Spis treści
+```
+
+The EPUB nav title is not configurable (go-epub does not expose a setter).
+
+**Block types**:
 
 #### `{start-models}` ... `{end-models}`
 
@@ -106,6 +143,24 @@ What year is it set in? = 1920s.
 ```
 
 A question-only line renders as a normal paragraph (body font). Consecutive question+answer lines are grouped into one aligned two-column block (question | answer, top-aligned, body font); a question-only line flushes the current group, so a block may contain several such runs.
+
+#### `{start-parallel}` ... `{end-parallel}`
+
+Two-column parallel text (e.g. original + translation side-by-side). Rows are separated by a lone `===` line; within a row the **last** lone `---` line splits the main cell from the secondary cell. A row may omit the secondary cell. `as=` is not accepted.
+
+```
+{start-parallel lang=pol script=latn}
+Pierwsze zdanie.
+---
+First sentence.
+===
+Drugie zdanie.
+---
+Second sentence.
+{end-parallel}
+```
+
+**Column rule**: the **primary (main) column** inherits the book's language, script, direction, and body font — it has no marker-derived override. The `lang=`/`script=` attributes on the marker set the **secondary column** only: its text direction (`arab`/`hebr`/`syrc` → RTL, all others → LTR) and the translation font role. Column order follows the book's reading direction (RTL book → main on the right, secondary on the left; LTR book → main on the left).
 
 #### EPUB stylesheets
 

@@ -19,19 +19,19 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 		{
 			name:  "full line: phrase, grammar, transcription, translation",
 			input: "{start-vocabulary}\n你好 {noun} [nǐ hǎo] = hello\n{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\">\n" +
+			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">你好</span>\n" +
-				"<span class=\"vocabulary-grammar\">noun</span>\n" +
-				"<span class=\"vocabulary-transcription\">nǐ hǎo</span>\n" +
-				"<span class=\"vocabulary-translation\">hello</span>\n" +
+				"<span class=\"vocabulary-grammar\" dir=\"ltr\">noun</span>\n" +
+				"<span class=\"vocabulary-transcription\" dir=\"ltr\">nǐ hǎo</span>\n" +
+				"<span class=\"vocabulary-translation\" dir=\"ltr\">hello</span>\n" +
 				"</div>\n" +
 				"</div>\n",
 		},
 		{
 			name:  "phrase only",
 			input: "{start-vocabulary}\n你好\n{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\">\n" +
+			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">你好</span>\n" +
 				"</div>\n" +
@@ -40,20 +40,20 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 		{
 			name:  "phrase + translation",
 			input: "{start-vocabulary}\n谢谢 = thank you\n{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\">\n" +
+			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">谢谢</span>\n" +
-				"<span class=\"vocabulary-translation\">thank you</span>\n" +
+				"<span class=\"vocabulary-translation\" dir=\"ltr\">thank you</span>\n" +
 				"</div>\n" +
 				"</div>\n",
 		},
 		{
 			name:  "phrase + grammar",
 			input: "{start-vocabulary}\n早上好 {greeting}\n{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\">\n" +
+			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">早上好</span>\n" +
-				"<span class=\"vocabulary-grammar\">greeting</span>\n" +
+				"<span class=\"vocabulary-grammar\" dir=\"ltr\">greeting</span>\n" +
 				"</div>\n" +
 				"</div>\n",
 		},
@@ -64,19 +64,19 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 				"再见\n" +
 				"谢谢 = thank you\n" +
 				"{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\">\n" +
+			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">你好</span>\n" +
-				"<span class=\"vocabulary-grammar\">noun</span>\n" +
-				"<span class=\"vocabulary-transcription\">nǐ hǎo</span>\n" +
-				"<span class=\"vocabulary-translation\">hello</span>\n" +
+				"<span class=\"vocabulary-grammar\" dir=\"ltr\">noun</span>\n" +
+				"<span class=\"vocabulary-transcription\" dir=\"ltr\">nǐ hǎo</span>\n" +
+				"<span class=\"vocabulary-translation\" dir=\"ltr\">hello</span>\n" +
 				"</div>\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">再见</span>\n" +
 				"</div>\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">谢谢</span>\n" +
-				"<span class=\"vocabulary-translation\">thank you</span>\n" +
+				"<span class=\"vocabulary-translation\" dir=\"ltr\">thank you</span>\n" +
 				"</div>\n" +
 				"</div>\n",
 		},

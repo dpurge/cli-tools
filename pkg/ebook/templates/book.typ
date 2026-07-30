@@ -7,61 +7,88 @@
   "Noto Sans",
 )
 
-#let _vocabFonts = state("vocab-fonts", (
-  header: _baseFont, transcription: _baseFont, translation: _baseFont,
+#let _roleFonts = state("role-fonts", (
+  body: _baseFont, header: _baseFont, transcription: _baseFont, translation: _baseFont, strong: _baseFont, emph: _baseFont,
 ))
 
-#let vocabulary(..items) = block(width: 100%, grid(
-  columns: (auto, 1fr),
-  column-gutter: 1em,
-  stroke: (y: 0.5pt + luma(220)),
-  align: (start + top, start + top),
-  inset: (x: 2pt, y: 4pt),
-  ..items.pos().map(it => (
-    {
-      strong(it.at("phrase", default: ""))
-      if it.at("grammar", default: "") != "" {
-        [ ]; context text(font: _vocabFonts.get().header, size: 0.85em, fill: gray)[#it.at("grammar")]
+#let _sourceDir = state("source-dir", ltr)
+
+#let textblock(role: "source", dir: ltr, body) = {
+  show heading.where(level: 1): set align(center)
+  show heading.where(level: 2): set align(center)
+  show heading.where(level: 3): set align(center)
+  set text(dir: dir)
+  if role == "grammar" {
+    show table: it => block(width: 100%, context text(dir: _sourceDir.get(), font: _roleFonts.get().body)[#it])
+    context text(font: _roleFonts.get().translation, body)
+  } else if role == "transcription" {
+    context text(font: _roleFonts.get().transcription, body)
+  } else if role == "translation" {
+    context text(font: _roleFonts.get().translation, body)
+  } else {
+    context text(font: _roleFonts.get().body, body)
+  }
+}
+
+#let vocabulary(dir: ltr, ..items) = {
+  set text(dir: dir)
+  block(width: 100%, grid(
+    columns: (1fr, 1fr),
+    column-gutter: 1em,
+    stroke: (y: 0.5pt + luma(220)),
+    align: (start + top, start + top),
+    inset: (x: 2pt, y: 4pt),
+    ..items.pos().map(it => (
+      {
+        strong(it.at("phrase", default: ""))
+        if it.at("grammar", default: "") != "" {
+          [ ]; context text(font: _roleFonts.get().header, dir: ltr, size: 0.85em, fill: gray)[#it.at("grammar")]
+        }
+        if it.at("transcription", default: "") != "" {
+          [ ]; emph[#context text(font: _roleFonts.get().transcription, dir: ltr)[\[#it.at("transcription")\]]]
+        }
+      },
+      context text(font: _roleFonts.get().translation, dir: ltr)[#it.at("translation", default: "")],
+    )).flatten()
+  ))
+}
+
+#let models(dir: ltr, ..items) = {
+  set text(dir: dir)
+  block(width: 100%, grid(
+    columns: (1fr, 1fr),
+    column-gutter: 1em,
+    align: (start + top, start + top),
+    inset: (x: 2pt, y: 4pt),
+    ..items.pos().map(it => {
+      let phrase = it.at("phrase", default: "")
+      let transcription = it.at("transcription", default: "")
+      let translation = it.at("translation", default: "")
+      if transcription == "" and translation == "" {
+        (grid.cell(colspan: 2, strong(phrase)),)
+      } else {
+        (
+          {
+            strong(phrase)
+            if transcription != "" and translation != "" {
+              linebreak()
+              emph[#context text(font: _roleFonts.get().transcription, dir: ltr)[\[#transcription\]]]
+            }
+          },
+          if translation != "" {
+            context text(font: _roleFonts.get().translation, dir: ltr)[#translation]
+          } else if transcription != "" {
+            emph[#context text(font: _roleFonts.get().transcription, dir: ltr)[\[#transcription\]]]
+          } else { [] },
+        )
       }
-      if it.at("transcription", default: "") != "" {
-        [ ]; emph[#context text(font: _vocabFonts.get().transcription)[\[#it.at("transcription")\]]]
-      }
-    },
-    context text(font: _vocabFonts.get().translation)[#it.at("translation", default: "")],
-  )).flatten()
-))
+    }).flatten()
+  ))
+}
 
-#let models(..items) = block(width: 100%, grid(
-  columns: (auto, 1fr),
-  column-gutter: 1em,
-  align: (start + top, start + top),
-  inset: (x: 2pt, y: 4pt),
-  ..items.pos().map(it => {
-    let phrase = it.at("phrase", default: "")
-    let transcription = it.at("transcription", default: "")
-    let translation = it.at("translation", default: "")
-    if transcription == "" and translation == "" {
-      (grid.cell(colspan: 2, strong(phrase)),)
-    } else {
-      (
-        {
-          strong(phrase)
-          if transcription != "" and translation != "" {
-            linebreak()
-            emph[#context text(font: _vocabFonts.get().transcription)[\[#transcription\]]]
-          }
-        },
-        if translation != "" {
-          context text(font: _vocabFonts.get().translation)[#translation]
-        } else if transcription != "" {
-          emph[#context text(font: _vocabFonts.get().transcription)[\[#transcription\]]]
-        } else { [] },
-      )
-    }
-  }).flatten()
-))
-
-#let questions(..items) = {
+#let questions(dir: ltr, ..items) = {
+  set text(dir: dir)
+  set par(first-line-indent: 0pt)
   let run = ()
   for it in items.pos() {
     let question = it.at("question", default: "")
@@ -82,16 +109,25 @@
   }
 }
 
-#let dialog(..turns) = block(width: 100%, grid(
-  columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
-  ..turns.pos().map(t => (strong(t.at("header", default: "")), t.at("content", default: []))).flatten()
-))
+#let dialog(dir: ltr, ..turns) = {
+  set text(dir: dir)
+  block(width: 100%, grid(
+    columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
+    ..turns.pos().map(t => (strong(t.at("header", default: "")), t.at("content", default: []))).flatten()
+  ))
+}
 
-#let parallel(..rows) = block(width: 100%, grid(
-  columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em,
-  stroke: (x: 0.5pt + luma(230)),
-  ..rows.pos().map(r => (r.at("main", default: []), r.at("secondary", default: []))).flatten()
-))
+#let parallel(secondary-dir: ltr, ..rows) = {
+  block(width: 100%, grid(
+    columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em,
+    stroke: (x: 0.5pt + luma(230)),
+    align: (start + top, start + top),
+    ..rows.pos().map(r => (
+      r.at("main", default: []),
+      context text(dir: secondary-dir, font: _roleFonts.get().translation)[#r.at("secondary", default: [])],
+    )).flatten()
+  ))
+}
 
 #let book(
   title: none,
@@ -112,16 +148,21 @@
   font-translation: (),
   font-strong: (),
   font-emph: (),
+  contents-title: [Contents],
   body,
 ) = {
   let headerFont = font-header + font
   let strongFont = font-strong + font
   let emphFont = font-emph + font
-  _vocabFonts.update((
+  _roleFonts.update((
+    body: font-body + font,
     header: headerFont,
     transcription: font-transcription + font,
     translation: font-translation + font,
+    strong: strongFont,
+    emph: emphFont,
   ))
+  _sourceDir.update(dir)
 
   set document(title: title, author: if author == none or author == "" { () } else { author })
   set text(
@@ -189,7 +230,7 @@
   set page(numbering: "i")
   counter(page).update(1)
   show outline.entry.where(level: 1): strong
-  outline(title: [Contents], indent: auto)
+  outline(title: contents-title, indent: auto)
   pagebreak()
 
   set page(numbering: "1")

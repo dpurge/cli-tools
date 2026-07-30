@@ -6,11 +6,12 @@ import (
 
 // Node kinds for the custom block types. KindInterlinear is defined for
 // completeness but never registered with the converter (see
-// interlinear.go). KindModels and KindQuestions are the highest ordinals
-// ever registered by this package; ALL THREE renderers (HTML, Typst, MDX)
-// MUST register a NodeRendererFunc for them, or a document containing
-// either block panics on the missing renderer (index out of range) — see
-// the identical warning on typstNodeRenderer/mdxNodeRenderer.
+// interlinear.go). KindText is the highest ordinal ever registered by this
+// package; ALL THREE renderers (HTML, Typst, MDX) MUST register a
+// NodeRendererFunc for EVERY kind through KindText, or a document
+// containing a block whose kind exceeds the registered maximum panics
+// (index out of range) — see the identical warning on typstNodeRenderer/
+// mdxNodeRenderer and SPECS ASR-1.
 var (
 	KindVocabulary  = gast.NewNodeKind("Vocabulary")
 	KindDialog      = gast.NewNodeKind("Dialog")
@@ -18,6 +19,7 @@ var (
 	KindInterlinear = gast.NewNodeKind("Interlinear")
 	KindModels      = gast.NewNodeKind("Models")
 	KindQuestions   = gast.NewNodeKind("Questions")
+	KindText        = gast.NewNodeKind("Text") // MUST be last; highest ordinal (ASR-1)
 )
 
 // VocabularyItem is one parsed `{start-vocabulary}` line: a phrase plus its
@@ -32,11 +34,14 @@ type VocabularyItem struct {
 // Vocabulary is the block node for a `{start-vocabulary}` ...
 // `{end-vocabulary}` block. Parsing (parser.go) fills Items; rendering
 // (renderer.go) only loops over Items — no markdown child nodes are ever
-// attached.
+// attached. Lang and Script are populated from marker attributes (M1);
+// direction/font wiring uses them in M2.
 type Vocabulary struct {
 	gast.BaseBlock
 
-	Items []VocabularyItem
+	Lang, Script string
+	Err          error
+	Items        []VocabularyItem
 }
 
 // Kind implements ast.Node.
@@ -65,13 +70,15 @@ type DialogItem struct {
 
 // Dialog is the block node for a `{start-dialog}` ... `{end-dialog}`
 // block. Err is set when a content line has invalid indentation (D3)
-// instead of the original gomarkdown port's log.Fatal; the renderer
-// surfaces it as a real error out of ToHTML/FileToHTML.
+// or when the marker attributes are malformed; the renderer surfaces it
+// as a real error out of ToHTML/FileToHTML. Lang and Script are populated
+// from marker attributes (M1); direction/font wiring uses them in M2.
 type Dialog struct {
 	gast.BaseBlock
 
-	Items []DialogItem
-	Err   error
+	Lang, Script string
+	Items        []DialogItem
+	Err          error
 }
 
 // Kind implements ast.Node.
@@ -94,11 +101,15 @@ type ParallelRow struct {
 }
 
 // Parallel is the block node for a `{start-parallel}` ... `{end-parallel}`
-// block.
+// block. Lang and Script are populated from marker attributes (M1);
+// direction/font wiring uses them in M2. Err is set when marker attributes
+// are malformed.
 type Parallel struct {
 	gast.BaseBlock
 
-	Rows []ParallelRow
+	Lang, Script string
+	Err          error
+	Rows         []ParallelRow
 }
 
 // Kind implements ast.Node.
@@ -122,11 +133,15 @@ type ModelsItem struct {
 }
 
 // Models is the block node for a `{start-models}` ... `{end-models}`
-// block.
+// block. Lang and Script are populated from marker attributes (M1);
+// direction/font wiring uses them in M2. Err is set when marker attributes
+// are malformed.
 type Models struct {
 	gast.BaseBlock
 
-	Items []ModelsItem
+	Lang, Script string
+	Err          error
+	Items        []ModelsItem
 }
 
 // Kind implements ast.Node.
@@ -149,11 +164,15 @@ type QuestionItem struct {
 }
 
 // Questions is the block node for a `{start-questions}` ... `{end-questions}`
-// block.
+// block. Lang and Script are populated from marker attributes (M1);
+// direction/font wiring uses them in M2. Err is set when marker attributes
+// are malformed.
 type Questions struct {
 	gast.BaseBlock
 
-	Items []QuestionItem
+	Lang, Script string
+	Err          error
+	Items        []QuestionItem
 }
 
 // Kind implements ast.Node.
@@ -164,5 +183,35 @@ func (n *Questions) IsRaw() bool { return true }
 
 // Dump implements ast.Node.
 func (n *Questions) Dump(source []byte, level int) {
+	gast.DumpHelper(n, source, level, nil, nil)
+}
+
+// Text is the block node for a `{start-text as=...}` ... `{end-text}` block
+// (SPECS §3.2, D8). Unlike vocabulary/models/questions, Text is a raw-markdown
+// block: its inner content is arbitrary markdown captured verbatim into Raw and
+// recursed at render time (ToTypst/ToHTML/ToMDX), NOT parsed into items.
+// As defaults to "source" when omitted on the marker. System is parsed and
+// stored for forward-compat (OI-9) but ignored by the PDF/EPUB renderers in M1.
+// Direction/font wiring is added in M2/M3. Err is set when marker attributes
+// are malformed (surfaced at render time, mirroring Dialog.Err).
+type Text struct {
+	gast.BaseBlock
+
+	As, Lang, Script, System string
+	Raw                       string
+	Err                       error
+}
+
+// Kind implements ast.Node.
+func (n *Text) Kind() gast.NodeKind { return KindText }
+
+// IsRaw marks the block as raw so goldmark does NOT run its generic inline
+// pass over the captured Lines() — the body is arbitrary markdown that is
+// recursed at render time, not goldmark-parsed into inline child nodes.
+// Mirrors Dialog/Parallel's IsRaw convention.
+func (n *Text) IsRaw() bool { return true }
+
+// Dump implements ast.Node.
+func (n *Text) Dump(source []byte, level int) {
 	gast.DumpHelper(n, source, level, nil, nil)
 }

@@ -10,42 +10,64 @@ import (
 	"github.com/yuin/goldmark/text"
 )
 
-// Start/end markers for the three active custom blocks.
+// Start/end markers for the custom blocks. Start markers intentionally
+// omit the closing '}' so that attributed forms like
+// {start-vocabulary lang=arb script=arab} are recognised by the HasPrefix
+// check in opensRawBlock. End markers remain exact literals.
 var (
-	startVocabulary = []byte("{start-vocabulary}")
+	startVocabulary = []byte("{start-vocabulary")
 	endVocabulary   = []byte("{end-vocabulary}")
 
-	startDialog = []byte("{start-dialog}")
+	startDialog = []byte("{start-dialog")
 	endDialog   = []byte("{end-dialog}")
 
-	startParallel = []byte("{start-parallel}")
+	startParallel = []byte("{start-parallel")
 	endParallel   = []byte("{end-parallel}")
 
-	startModels = []byte("{start-models}")
+	startModels = []byte("{start-models")
 	endModels   = []byte("{end-models}")
 
-	startQuestions = []byte("{start-questions}")
+	startQuestions = []byte("{start-questions")
 	endQuestions   = []byte("{end-questions}")
+
+	startText = []byte("{start-text")
+	endText   = []byte("{end-text}")
 )
 
 // opensRawBlock reports whether the reader is positioned at a line that
 // starts with start AND a matching end marker exists later in the source.
+// When both conditions hold it consumes the start-marker line and returns
+// (markerLine, true); markerLine is the raw line slice (including any
+// trailing \r\n) valid for attribute parsing via parseMarkerAttrs (attr.go).
+// When either condition fails it returns (nil, false) leaving the reader
+// position unchanged so the line falls through to ordinary paragraph text.
 //
-// The second condition is parity-critical: if a block is never terminated,
-// the `{start-X}` line must fall through to ordinary paragraph text instead
-// of swallowing the remainder of the document (this mirrors the previous
-// gomarkdown parser hook's `return nil, data, 0` fallback). Only when both
-// conditions hold is the start-marker line consumed.
-func opensRawBlock(reader text.Reader, start, end []byte) bool {
+// The start slice must NOT include the closing '}' (the start vars above
+// omit it) so that attributed forms like {start-vocabulary lang=arb} are
+// matched. To prevent spurious prefix collision with longer block names the
+// byte immediately following the prefix must be '}', whitespace, or a line
+// terminator — any other byte rejects the match.
+//
+// The end-marker presence check is parity-critical: an unterminated block
+// must fall through rather than swallow the remainder of the document,
+// mirroring the previous gomarkdown hook's `return nil, data, 0` fallback.
+func opensRawBlock(reader text.Reader, start, end []byte) ([]byte, bool) {
 	line, segment := reader.PeekLine()
 	if !bytes.HasPrefix(line, start) {
-		return false
+		return nil, false
+	}
+	// Boundary guard: the byte immediately after the prefix must be '}',
+	// whitespace, or a line terminator — not another name character.
+	if rest := line[len(start):]; len(rest) > 0 &&
+		rest[0] != '}' && rest[0] != ' ' && rest[0] != '\t' &&
+		rest[0] != '\r' && rest[0] != '\n' {
+		return nil, false
 	}
 	if !bytes.Contains(reader.Source()[segment.Stop:], end) {
-		return false
+		return nil, false
 	}
 	reader.AdvanceToEOL()
-	return true
+	return line, true
 }
 
 // continueRawBlock accumulates the current line into node's body lines
@@ -79,10 +101,22 @@ func newVocabularyParser() parser.BlockParser { return &vocabularyParser{} }
 func (b *vocabularyParser) Trigger() []byte { return []byte{'{'} }
 
 func (b *vocabularyParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
-	if !opensRawBlock(reader, startVocabulary, endVocabulary) {
+	markerLine, ok := opensRawBlock(reader, startVocabulary, endVocabulary)
+	if !ok {
 		return nil, parser.NoChildren
 	}
-	return &Vocabulary{}, parser.NoChildren
+	n := &Vocabulary{}
+	attrs, err := parseMarkerAttrs(markerLine, "vocabulary")
+	if err != nil {
+		n.Err = err
+	} else {
+		if attrs.As != "" {
+			n.Err = fmt.Errorf("attribute as= is not valid on {start-vocabulary}")
+		}
+		n.Lang = attrs.Lang
+		n.Script = attrs.Script
+	}
+	return n, parser.NoChildren
 }
 
 func (b *vocabularyParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
@@ -151,10 +185,22 @@ func newDialogParser() parser.BlockParser { return &dialogParser{} }
 func (b *dialogParser) Trigger() []byte { return []byte{'{'} }
 
 func (b *dialogParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
-	if !opensRawBlock(reader, startDialog, endDialog) {
+	markerLine, ok := opensRawBlock(reader, startDialog, endDialog)
+	if !ok {
 		return nil, parser.NoChildren
 	}
-	return &Dialog{}, parser.NoChildren
+	n := &Dialog{}
+	attrs, err := parseMarkerAttrs(markerLine, "dialog")
+	if err != nil {
+		n.Err = err
+	} else {
+		if attrs.As != "" {
+			n.Err = fmt.Errorf("attribute as= is not valid on {start-dialog}")
+		}
+		n.Lang = attrs.Lang
+		n.Script = attrs.Script
+	}
+	return n, parser.NoChildren
 }
 
 func (b *dialogParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
@@ -260,10 +306,22 @@ func newParallelParser() parser.BlockParser { return &parallelParser{} }
 func (b *parallelParser) Trigger() []byte { return []byte{'{'} }
 
 func (b *parallelParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
-	if !opensRawBlock(reader, startParallel, endParallel) {
+	markerLine, ok := opensRawBlock(reader, startParallel, endParallel)
+	if !ok {
 		return nil, parser.NoChildren
 	}
-	return &Parallel{}, parser.NoChildren
+	n := &Parallel{}
+	attrs, err := parseMarkerAttrs(markerLine, "parallel")
+	if err != nil {
+		n.Err = err
+	} else {
+		if attrs.As != "" {
+			n.Err = fmt.Errorf("attribute as= is not valid on {start-parallel}")
+		}
+		n.Lang = attrs.Lang
+		n.Script = attrs.Script
+	}
+	return n, parser.NoChildren
 }
 
 func (b *parallelParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
@@ -322,10 +380,22 @@ func newModelsParser() parser.BlockParser { return &modelsParser{} }
 func (b *modelsParser) Trigger() []byte { return []byte{'{'} }
 
 func (b *modelsParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
-	if !opensRawBlock(reader, startModels, endModels) {
+	markerLine, ok := opensRawBlock(reader, startModels, endModels)
+	if !ok {
 		return nil, parser.NoChildren
 	}
-	return &Models{}, parser.NoChildren
+	n := &Models{}
+	attrs, err := parseMarkerAttrs(markerLine, "models")
+	if err != nil {
+		n.Err = err
+	} else {
+		if attrs.As != "" {
+			n.Err = fmt.Errorf("attribute as= is not valid on {start-models}")
+		}
+		n.Lang = attrs.Lang
+		n.Script = attrs.Script
+	}
+	return n, parser.NoChildren
 }
 
 func (b *modelsParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
@@ -393,10 +463,22 @@ func newQuestionsParser() parser.BlockParser { return &questionsParser{} }
 func (b *questionsParser) Trigger() []byte { return []byte{'{'} }
 
 func (b *questionsParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
-	if !opensRawBlock(reader, startQuestions, endQuestions) {
+	markerLine, ok := opensRawBlock(reader, startQuestions, endQuestions)
+	if !ok {
 		return nil, parser.NoChildren
 	}
-	return &Questions{}, parser.NoChildren
+	n := &Questions{}
+	attrs, err := parseMarkerAttrs(markerLine, "questions")
+	if err != nil {
+		n.Err = err
+	} else {
+		if attrs.As != "" {
+			n.Err = fmt.Errorf("attribute as= is not valid on {start-questions}")
+		}
+		n.Lang = attrs.Lang
+		n.Script = attrs.Script
+	}
+	return n, parser.NoChildren
 }
 
 func (b *questionsParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
@@ -410,6 +492,57 @@ func (b *questionsParser) Close(node gast.Node, reader text.Reader, pc parser.Co
 
 func (b *questionsParser) CanInterruptParagraph() bool { return true }
 func (b *questionsParser) CanAcceptIndentedLine() bool { return false }
+
+// ---------------------------------------------------------------------
+// Text
+// ---------------------------------------------------------------------
+
+type textParser struct{}
+
+func newTextParser() parser.BlockParser { return &textParser{} }
+
+func (b *textParser) Trigger() []byte { return []byte{'{'} }
+
+// Open parses the {start-text as=... lang=... script=...} marker and returns
+// a Text node. as defaults to "source" when omitted (SPECS §4.2). System is
+// parsed and stored for forward-compat but not yet used by any renderer
+// (OI-9). An attribute-parse error is stored on Text.Err and surfaced at
+// render time, mirroring Dialog.Err.
+func (b *textParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
+	markerLine, ok := opensRawBlock(reader, startText, endText)
+	if !ok {
+		return nil, parser.NoChildren
+	}
+	n := &Text{}
+	attrs, err := parseMarkerAttrs(markerLine, "text")
+	if err != nil {
+		n.Err = err
+	} else {
+		n.As = attrs.As
+		if n.As == "" {
+			n.As = "source"
+		}
+		n.Lang = attrs.Lang
+		n.Script = attrs.Script
+		n.System = attrs.System
+	}
+	return n, parser.NoChildren
+}
+
+func (b *textParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
+	return continueRawBlock(node, reader, endText)
+}
+
+// Close captures the raw inner markdown into Text.Raw so renderers can
+// recurse through ToHTML/ToTypst/ToMDX at render time (mirrors
+// Dialog/Parallel's rawBlockText pattern, SPECS §3.2).
+func (b *textParser) Close(node gast.Node, reader text.Reader, pc parser.Context) {
+	n := node.(*Text)
+	n.Raw = rawBlockText(node, reader)
+}
+
+func (b *textParser) CanInterruptParagraph() bool { return true }
+func (b *textParser) CanAcceptIndentedLine() bool { return false }
 
 // parseQuestionsItems splits each dedented `{start-questions}` line at the
 // FIRST " = " (space-delimited) occurrence into question/answer: an answer

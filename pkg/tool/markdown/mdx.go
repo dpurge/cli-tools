@@ -77,6 +77,7 @@ func newMdxRenderer(lang, script string) renderer.Renderer {
 // document's OWN final trailing blank line down to a single newline, so
 // the body never ends with dangling blank lines.
 func ToMDX(source []byte, lang, script string) ([]byte, error) {
+	source = normalizeNewlines(source)
 	doc := md.Parser().Parse(text.NewReader(source))
 	r := newMdxRenderer(lang, script)
 
@@ -111,7 +112,7 @@ func ToMDX(source []byte, lang, script string) ([]byte, error) {
 			if err := r.Render(&out, source, n); err != nil {
 				return nil, err
 			}
-		case KindVocabulary, KindDialog, KindParallel, KindModels, KindQuestions:
+		case KindVocabulary, KindDialog, KindParallel, KindModels, KindQuestions, KindText:
 			if err := flush(); err != nil {
 				return nil, err
 			}

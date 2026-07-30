@@ -37,7 +37,7 @@ func TestToHTML_Parallel_Golden(t *testing.T) {
 				"<hr />\n" +
 				"<p>Second para in main.</p>\n" +
 				"\n</div>\n" +
-				"<div class=\"parallel-cell secondary\">\n" +
+				"<div class=\"parallel-cell secondary\" dir=\"ltr\">\n" +
 				"<p>Secondary cell.</p>\n" +
 				"\n</div>\n" +
 				"</div>\n" +
@@ -70,13 +70,34 @@ func TestToHTML_Parallel_Golden(t *testing.T) {
 				"<div class=\"parallel-cell main\">\n" +
 				"<p>Row1 main.</p>\n" +
 				"\n</div>\n" +
-				"<div class=\"parallel-cell secondary\">\n" +
+				"<div class=\"parallel-cell secondary\" dir=\"ltr\">\n" +
 				"<p>Row1 secondary.</p>\n" +
 				"\n</div>\n" +
 				"</div>\n" +
 				"<div class=\"parallel-row\">\n" +
 				"<div class=\"parallel-cell main\">\n" +
 				"<p>Row2 main only.</p>\n" +
+				"\n</div>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
+			// The secondary column follows the marker script: script=arab
+			// pins its dir="rtl". The container and main cell carry NO dir
+			// (they inherit the book direction from body{direction} in CSS).
+			name: "script=arab pins secondary cell dir=rtl; main inherits book",
+			input: "{start-parallel script=arab}\n" +
+				"Main text.\n" +
+				"---\n" +
+				"Secondary text.\n" +
+				"{end-parallel}\n",
+			want: "<div class=\"parallel\">\n" +
+				"<div class=\"parallel-row\">\n" +
+				"<div class=\"parallel-cell main\">\n" +
+				"<p>Main text.</p>\n" +
+				"\n</div>\n" +
+				"<div class=\"parallel-cell secondary\" dir=\"rtl\">\n" +
+				"<p>Secondary text.</p>\n" +
 				"\n</div>\n" +
 				"</div>\n" +
 				"</div>\n",

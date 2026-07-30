@@ -107,6 +107,8 @@ func (r *mdxNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer)
 	reg.Register(KindParallel, r.renderParallel)
 	reg.Register(KindModels, r.renderModels)
 	reg.Register(KindQuestions, r.renderQuestions)
+	// KindText MUST be registered last (highest ordinal, ASR-1 panic-gate).
+	reg.Register(KindText, r.renderTextblock)
 }
 
 // renderChildrenToBuf renders node's CHILDREN (never node itself) into a
@@ -715,6 +717,9 @@ func (r *mdxNodeRenderer) renderVocabulary(w util.BufWriter, source []byte, node
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Vocabulary)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
 	var body strings.Builder
 	for i, item := range n.Items {
@@ -740,11 +745,19 @@ func (r *mdxNodeRenderer) renderVocabulary(w util.BufWriter, source []byte, node
 	content := body.String()
 	fence := mdxFence(content)
 
+	lang := r.lang
+	if n.Lang != "" {
+		lang = n.Lang
+	}
+	script := r.script
+	if n.Script != "" {
+		script = n.Script
+	}
 	io.WriteString(w, fence)
 	io.WriteString(w, "vocabulary lang=")
-	io.WriteString(w, r.lang)
+	io.WriteString(w, lang)
 	io.WriteString(w, " script=")
-	io.WriteString(w, r.script)
+	io.WriteString(w, script)
 	io.WriteString(w, "\n")
 	io.WriteString(w, content)
 	io.WriteString(w, "\n")
@@ -799,11 +812,19 @@ func (r *mdxNodeRenderer) renderDialog(w util.BufWriter, source []byte, node gas
 	content := strings.TrimRight(body.String(), "\n")
 	fence := mdxFence(content)
 
+	lang := r.lang
+	if n.Lang != "" {
+		lang = n.Lang
+	}
+	script := r.script
+	if n.Script != "" {
+		script = n.Script
+	}
 	io.WriteString(w, fence)
 	io.WriteString(w, "dialog lang=")
-	io.WriteString(w, r.lang)
+	io.WriteString(w, lang)
 	io.WriteString(w, " script=")
-	io.WriteString(w, r.script)
+	io.WriteString(w, script)
 	io.WriteString(w, "\n")
 	io.WriteString(w, content)
 	io.WriteString(w, "\n")
@@ -831,6 +852,9 @@ func (r *mdxNodeRenderer) renderParallel(w util.BufWriter, source []byte, node g
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Parallel)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
 	rowStrs := make([]string, 0, len(n.Rows))
 	for _, row := range n.Rows {
@@ -843,11 +867,19 @@ func (r *mdxNodeRenderer) renderParallel(w util.BufWriter, source []byte, node g
 	content := strings.Join(rowStrs, "\n===\n")
 	fence := mdxFence(content)
 
+	lang := r.lang
+	if n.Lang != "" {
+		lang = n.Lang
+	}
+	script := r.script
+	if n.Script != "" {
+		script = n.Script
+	}
 	io.WriteString(w, fence)
 	io.WriteString(w, "parallel lang=")
-	io.WriteString(w, r.lang)
+	io.WriteString(w, lang)
 	io.WriteString(w, " script=")
-	io.WriteString(w, r.script)
+	io.WriteString(w, script)
 	io.WriteString(w, "\n")
 	io.WriteString(w, content)
 	io.WriteString(w, "\n")
@@ -875,6 +907,9 @@ func (r *mdxNodeRenderer) renderModels(w util.BufWriter, source []byte, node gas
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Models)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
 	var body strings.Builder
 	for i, item := range n.Items {
@@ -895,11 +930,19 @@ func (r *mdxNodeRenderer) renderModels(w util.BufWriter, source []byte, node gas
 	content := body.String()
 	fence := mdxFence(content)
 
+	lang := r.lang
+	if n.Lang != "" {
+		lang = n.Lang
+	}
+	script := r.script
+	if n.Script != "" {
+		script = n.Script
+	}
 	io.WriteString(w, fence)
 	io.WriteString(w, "models lang=")
-	io.WriteString(w, r.lang)
+	io.WriteString(w, lang)
 	io.WriteString(w, " script=")
-	io.WriteString(w, r.script)
+	io.WriteString(w, script)
 	io.WriteString(w, "\n")
 	io.WriteString(w, content)
 	io.WriteString(w, "\n")
@@ -923,6 +966,9 @@ func (r *mdxNodeRenderer) renderQuestions(w util.BufWriter, source []byte, node 
 		return gast.WalkContinue, nil
 	}
 	n := node.(*Questions)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
 
 	var body strings.Builder
 	for i, item := range n.Items {
@@ -938,11 +984,19 @@ func (r *mdxNodeRenderer) renderQuestions(w util.BufWriter, source []byte, node 
 	content := body.String()
 	fence := mdxFence(content)
 
+	lang := r.lang
+	if n.Lang != "" {
+		lang = n.Lang
+	}
+	script := r.script
+	if n.Script != "" {
+		script = n.Script
+	}
 	io.WriteString(w, fence)
 	io.WriteString(w, "questions lang=")
-	io.WriteString(w, r.lang)
+	io.WriteString(w, lang)
 	io.WriteString(w, " script=")
-	io.WriteString(w, r.script)
+	io.WriteString(w, script)
 	io.WriteString(w, "\n")
 	io.WriteString(w, content)
 	io.WriteString(w, "\n")
@@ -950,5 +1004,60 @@ func (r *mdxNodeRenderer) renderQuestions(w util.BufWriter, source []byte, node 
 	io.WriteString(w, "\n\n")
 	r.atLineStart = true
 
+	return gast.WalkContinue, nil
+}
+
+// renderTextblock emits `<Text [as="X"] lang="L" script="S">` for a
+// {start-text as=X} node (SPECS §7.7, OI-7, M3). as="source" omits the
+// as= attribute (phraseforge corpus default, Text.tsx:23-43). lang/script
+// come from the node when parsed off the marker; otherwise fall back to the
+// call-level r.lang/r.script. The Raw inner markdown is emitted verbatim
+// (fence bodies are literal in MDX, SPECS §5.1) — not re-run through a
+// renderer — then the closing </Text> tag closes the element.
+func (r *mdxNodeRenderer) renderTextblock(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Text)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+	as := n.As
+	if as == "" {
+		as = "source"
+	}
+	lang := n.Lang
+	if lang == "" {
+		lang = r.lang
+	}
+	script := n.Script
+	if script == "" {
+		script = r.script
+	}
+	io.WriteString(w, "<Text")
+	if as != "source" {
+		io.WriteString(w, " as=\"")
+		io.WriteString(w, as)
+		io.WriteString(w, "\"")
+	}
+	if lang != "" {
+		io.WriteString(w, " lang=\"")
+		io.WriteString(w, lang)
+		io.WriteString(w, "\"")
+	}
+	if script != "" {
+		io.WriteString(w, " script=\"")
+		io.WriteString(w, script)
+		io.WriteString(w, "\"")
+	}
+	io.WriteString(w, ">\n\n")
+	if n.Raw != "" {
+		io.WriteString(w, n.Raw)
+		if !strings.HasSuffix(n.Raw, "\n") {
+			io.WriteString(w, "\n")
+		}
+	}
+	io.WriteString(w, "\n</Text>\n\n")
+	r.atLineStart = true
 	return gast.WalkContinue, nil
 }
