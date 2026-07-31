@@ -338,14 +338,14 @@ func TestToTypst_Vocabulary_Golden(t *testing.T) {
 		{
 			name:  "full line: phrase, grammar, transcription, translation",
 			input: "{start-vocabulary}\n你好 {noun} [nǐ hǎo] = hello\n{end-vocabulary}\n",
-			want: "#vocabulary(dir: ltr,\n" +
+			want: "#vocabulary(dir: ltr, script: \"\",\n" +
 				"  (phrase: \"你好\", grammar: \"noun\", transcription: \"nǐ hǎo\", translation: \"hello\"),\n" +
 				")\n\n",
 		},
 		{
 			name:  "phrase only, other fields empty",
 			input: "{start-vocabulary}\n再见\n{end-vocabulary}\n",
-			want: "#vocabulary(dir: ltr,\n" +
+			want: "#vocabulary(dir: ltr, script: \"\",\n" +
 				"  (phrase: \"再见\", grammar: \"\", transcription: \"\", translation: \"\"),\n" +
 				")\n\n",
 		},
@@ -371,7 +371,7 @@ func TestToTypst_Dialog_Golden(t *testing.T) {
 				"@Bob:\n" +
 				"  Hi!\n" +
 				"{end-dialog}\n",
-			want: "#dialog(dir: ltr,\n" +
+			want: "#dialog(dir: ltr, script: \"\", role: \"source\",\n" +
 				"  (header: \"—\", content: [Hello #strong[there]\\.\n\n]),\n" +
 				"  (header: \"Bob:\", content: [Hi!\n\n]),\n" +
 				")\n\n",
@@ -425,7 +425,7 @@ func TestToTypst_Parallel_Golden(t *testing.T) {
 				"===\n" +
 				"Row2 main only.\n" +
 				"{end-parallel}\n",
-			want: "#parallel(secondary-dir: ltr,\n" +
+			want: "#parallel(secondary-dir: ltr, script: \"\",\n" +
 				"  (main: [First para\\.\n\n#line(length: 100%)\nSecond para in main\\.\n\n], secondary: [Secondary cell\\.\n\n]),\n" +
 				"  (main: [Row2 main only\\.\n\n], secondary: []),\n" +
 				")\n\n",
@@ -440,7 +440,7 @@ func TestToTypst_Parallel_Golden(t *testing.T) {
 				"---\n" +
 				"Secondary.\n" +
 				"{end-parallel}\n",
-			want: "#parallel(secondary-dir: rtl,\n" +
+			want: "#parallel(secondary-dir: rtl, script: \"arab\",\n" +
 				"  (main: [Main\\.\n\n], secondary: [Secondary\\.\n\n]),\n" +
 				")\n\n",
 		},
@@ -511,7 +511,7 @@ func TestToTypst_EscapeTypstString(t *testing.T) {
 		{
 			name:  "quote and backslash escaped, markup metachars (/ .) are NOT",
 			input: "{start-vocabulary}\na\"b\\c/d.e\n{end-vocabulary}\n",
-			want: "#vocabulary(dir: ltr,\n" +
+			want: "#vocabulary(dir: ltr, script: \"\",\n" +
 				"  (phrase: \"a\\\"b\\\\c/d.e\", grammar: \"\", transcription: \"\", translation: \"\"),\n" +
 				")\n\n",
 		},
@@ -553,14 +553,14 @@ func TestToTypst_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase only, other fields empty",
 			input: "{start-models}\n你好\n{end-models}\n",
-			want: "#models(dir: ltr,\n" +
+			want: "#models(dir: ltr, script: \"\",\n" +
 				"  (phrase: \"你好\", transcription: \"\", translation: \"\"),\n" +
 				")\n\n",
 		},
 		{
 			name:  "phrase, transcription and translation",
 			input: "{start-models}\nrun [rʌn] = biec\n{end-models}\n",
-			want: "#models(dir: ltr,\n" +
+			want: "#models(dir: ltr, script: \"\",\n" +
 				"  (phrase: \"run\", transcription: \"rʌn\", translation: \"biec\"),\n" +
 				")\n\n",
 		},
@@ -578,14 +578,14 @@ func TestToTypst_Questions_Golden(t *testing.T) {
 		{
 			name:  "question only, no answer",
 			input: "{start-questions}\nWhat is your name?\n{end-questions}\n",
-			want: "#questions(dir: ltr,\n" +
+			want: "#questions(dir: ltr, script: \"\", role: \"source\",\n" +
 				"  (question: \"What is your name?\", answer: \"\"),\n" +
 				")\n\n",
 		},
 		{
 			name:  "question and answer",
 			input: "{start-questions}\nWhere are you from? = Poland\n{end-questions}\n",
-			want: "#questions(dir: ltr,\n" +
+			want: "#questions(dir: ltr, script: \"\", role: \"source\",\n" +
 				"  (question: \"Where are you from?\", answer: \"Poland\"),\n" +
 				")\n\n",
 		},

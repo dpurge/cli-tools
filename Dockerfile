@@ -39,6 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     fonts-hosny-amiri \
     fonts-nafees \
     fonts-noto \
+    fonts-noto-cjk \
+    fonts-noto-extra \
     fonts-sil-andika \
     fonts-sil-charis \
     fonts-sil-doulos \

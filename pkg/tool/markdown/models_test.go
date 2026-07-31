@@ -1,6 +1,7 @@
 package markdown_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dpurge/cli-tools/pkg/tool/markdown"
@@ -160,5 +161,20 @@ func TestToHTML_Models_Golden(t *testing.T) {
 				t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), tc.want)
 			}
 		})
+	}
+}
+
+// TestModels_As_Rejected covers SPECS §5: models' field languages are fixed
+// (like vocabulary), so as= is rejected entirely, with a clearer message
+// than the pre-unification blanket rejection.
+func TestModels_As_Rejected(t *testing.T) {
+	input := "{start-models as=source}\nrun = biec\n{end-models}\n"
+	_, err := markdown.ToHTML([]byte(input))
+	if err == nil {
+		t.Fatalf("ToHTML() expected an error for as= on {start-models}, got nil")
+	}
+	wantErr := "as= not applicable to {start-models}: its field languages are fixed"
+	if !strings.Contains(err.Error(), wantErr) {
+		t.Fatalf("ToHTML() error = %q, want substring %q", err.Error(), wantErr)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/dpurge/cli-tools/pkg/config"
@@ -150,18 +151,35 @@ func assembleTypstDocument(project *EBookProject, lang, dir, cover string, bodie
 
 	// Per-role fonts from font.css, prepended in book.typ so the PDF mirrors the
 	// EPUB CSS roles; a recommended font fills in when a role is undeclared.
-	roles := parseFontRoles(project.Stylesheet.Common)
-	for _, r := range []struct{ arg, parsed, key string }{
-		{"font-body", roles.body, "body"},
-		{"font-header", roles.header, "header"},
-		{"font-transcription", roles.transcription, "transcription"},
-		{"font-translation", roles.translation, "translation"},
-		{"font-strong", roles.strong, "strong"},
-		{"font-emph", roles.emph, "emphasis"},
+	// SPECS §8.3: the 6 legacy base-role args stay exactly as before (ASR-1);
+	// the qualified table (below) is purely additive.
+	table := parseFontRoles(project.Stylesheet.Common)
+	for _, r := range []struct{ arg, key string }{
+		{"font-body", "body"},
+		{"font-header", "header"},
+		{"font-transcription", "transcription"},
+		{"font-translation", "translation"},
+		{"font-strong", "strong"},
+		{"font-emph", "emphasis"},
 	} {
-		if stack := roleFontPrefix(r.parsed, r.key); len(stack) > 0 {
+		if stack := roleFontPrefix(table.BaseRole(r.key), r.key); len(stack) > 0 {
 			doc.WriteString("  " + r.arg + ": " + typstFontArray(stack) + ",\n")
 		}
+	}
+
+	// SPECS §8.2/§8.3: the full qualified slot table, for book.typ's
+	// #_resolveFont to look up script/extension/field/style-qualified
+	// families at compile time (per-block resolution, since only the
+	// generated .typ block calls -- not this Go-side assembly -- know each
+	// block's own script/field). book-script is passed through for
+	// forward-compat/debugging ONLY (SPECS A2: resolution keys exclusively
+	// on each block's OWN resolved script, never the book's, so book-script
+	// deliberately does not participate in _resolveFont).
+	if slots := table.Slots(); len(slots) > 0 {
+		doc.WriteString("  font-slots: " + typstFontSlotsDict(slots) + ",\n")
+	}
+	if project.Script != "" {
+		doc.WriteString("  book-script: " + typstStringLiteral(strings.ToLower(project.Script)) + ",\n")
 	}
 
 	doc.WriteString(")\n\n")
@@ -234,16 +252,30 @@ func typstFontArray(fonts []string) string {
 	return "(" + joined + ")"
 }
 
-// fontRoles holds the font each @font-face role in a project's font.css
-// resolves to (via its local(...) name); empty means the role is undeclared.
-type fontRoles struct {
-	header, body, transcription, translation, strong, emph string
+// typstFontSlotsDict renders a canonical-key -> family map as a Typst
+// dictionary literal, sorted by key for deterministic (golden-test-stable)
+// output. Values are plain strings (not arrays): #_resolveFont in book.typ
+// appends the recommended fallback itself, mirroring how the base-role args
+// above are shaped by roleFontPrefix rather than pre-baked here.
+func typstFontSlotsDict(slots map[string]string) string {
+	keys := make([]string, 0, len(slots))
+	for k := range slots {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, typstStringLiteral(k)+": "+typstStringLiteral(slots[k]))
+	}
+	return "(" + strings.Join(parts, ", ") + ")"
 }
 
 // recommendedRoleFont is the installed Latin fallback prepended per role when
 // font.css is absent or omits it; non-Latin glyphs resolve via book.typ's stack.
 // strong/emphasis fall back to the body font, so an undeclared role drops the
 // synthetic bold/italic distinction rather than inventing an unrelated one.
+// Keys are the 6 legacy base-role names (SPECS §3's "Base role" vocabulary,
+// lowercased) — also used as FontTable's base-role fallback keys (§4 level 4).
 var recommendedRoleFont = map[string]string{
 	"header":        "Noto Sans",
 	"body":          "Gentium",
@@ -259,10 +291,234 @@ var (
 	fontLocalRe  = regexp.MustCompile(`local\(\s*["']?([^"')]+?)["']?\s*\)`)
 )
 
-// parseFontRoles reads the project's font.css and returns the local() font each
-// Font Header/Body/Transcription/Translation @font-face resolves to.
-func parseFontRoles(stylesheetPaths []string) fontRoles {
-	var roles fontRoles
+// SPECS §3's four disjoint segment vocabularies, checked in this priority
+// order (extension/field/style as exact sets first) so a segment that is
+// ALSO shaped like a 4-letter ISO-15924 script code — e.g. the "Text"
+// extension — classifies as the extension, not a script. A segment
+// matching none of these AND not shaped like a script code is silently
+// ignored (G9, deferred lint — mirrors the pre-existing whole-role
+// typo-ignoring behavior this replaces).
+var fontExtensions = map[string]bool{
+	"text": true, "dialog": true, "questions": true,
+	"vocabulary": true, "models": true, "parallel": true,
+}
+
+var fontFields = map[string]bool{
+	"source": true, "transcription": true, "translation": true, "grammar": true,
+	"phrase": true, "question": true, "answer": true, "content": true,
+	"main": true, "secondary": true, "tag": true, "header": true,
+}
+
+var fontStyles = map[string]bool{"strong": true, "emphasis": true}
+
+// fontBaseRoleWords are the 6 legacy base-role names: SPECS §3 reserves
+// these as "zero-qualifier only" — a role name is the legacy base role
+// ONLY when it has exactly one segment matching this set (checked before
+// the general per-segment classification below), e.g. "Font Body".
+var fontBaseRoleWords = map[string]bool{
+	"body": true, "header": true, "transcription": true,
+	"translation": true, "strong": true, "emphasis": true,
+}
+
+// scriptSegmentRe matches a bare ISO-15924 code shape (4 alphabetic
+// characters): SPECS §3 treats Script as the open/unbounded vocabulary, so
+// anything not classified as an extension/field/style is presumed a script
+// only if it has this shape; anything else is an unrecognized segment.
+var scriptSegmentRe = regexp.MustCompile(`^[A-Za-z]{4}$`)
+
+// slotKey joins the non-empty parts (in the order given) with a single
+// space, producing the canonical FontTable key regardless of how many
+// axes are populated. Both classifyFontFamily (parse time) and
+// FontTable.resolve (query time) use this so a declared family's key and a
+// query's candidate key always agree for the same (script,ext,field,style).
+func slotKey(parts ...string) string {
+	var nonEmpty []string
+	for _, p := range parts {
+		if p != "" {
+			nonEmpty = append(nonEmpty, p)
+		}
+	}
+	return strings.Join(nonEmpty, " ")
+}
+
+// classifyFontFamily parses a "Font <segments...>" family name (case-
+// insensitive) per SPECS §3's grammar and returns its canonical slot key —
+// segments are re-ordered Script,Extension,Field,Style regardless of the
+// author's own order ("order-tolerant" parsing; canonical order is a
+// readability convention only). ok is false when name isn't a "Font ..."
+// role name, or every segment is unrecognized (nothing to classify).
+func classifyFontFamily(name string) (key string, ok bool) {
+	fields := strings.Fields(name)
+	if len(fields) == 0 || !strings.EqualFold(fields[0], "font") {
+		return "", false
+	}
+	segments := fields[1:]
+	if len(segments) == 0 {
+		return "", false
+	}
+	// A single segment matching a legacy base-role name IS that base role
+	// (SPECS §3: reserved, zero-qualifier only) — checked before the
+	// general per-segment loop so e.g. "Font Body" (4 letters, would also
+	// match scriptSegmentRe) is never misread as a script-only role.
+	if len(segments) == 1 && fontBaseRoleWords[strings.ToLower(segments[0])] {
+		return strings.ToLower(segments[0]), true
+	}
+
+	var script, ext, field, style string
+	for _, seg := range segments {
+		s := strings.ToLower(seg)
+		switch {
+		case fontExtensions[s]:
+			ext = s
+		case fontFields[s]:
+			field = s
+		case fontStyles[s]:
+			style = s
+		case scriptSegmentRe.MatchString(seg):
+			script = s
+		default:
+			// Unrecognized segment: ignored (G9), matches legacy behavior.
+		}
+	}
+	key = slotKey(script, ext, field, style)
+	if key == "" {
+		return "", false
+	}
+	return key, true
+}
+
+// FontTable holds every parsed font.css @font-face family, keyed by its
+// classified SPECS §3 slot, including the 6 legacy base roles (a strict,
+// backward-compatible subset stored under their bare lowercased name —
+// ASR-1). Zero value is a valid, empty table (every Lookup falls through to
+// recommendedRoleFont).
+type FontTable struct {
+	slots map[string]string
+}
+
+// BaseRole returns the legacy base role's declared family (e.g. "body",
+// "header"), or "" if font.css didn't declare it — used by
+// assembleTypstDocument for the unchanged font-body/font-header/... args
+// (SPECS §8.3: "base roles as today, plus the qualified families").
+func (t FontTable) BaseRole(name string) string {
+	if t.slots == nil {
+		return ""
+	}
+	return t.slots[strings.ToLower(name)]
+}
+
+// Slots returns the full parsed slot map (canonical key -> family), for
+// serializing into the generated .typ document (assembleTypstDocument) and
+// for test inspection. The returned map must not be mutated by the caller.
+func (t FontTable) Slots() map[string]string {
+	return t.slots
+}
+
+// baseRoleForField implements SPECS §4's "BaseRole(F) map": Source/Content/
+// Main/Question/Answer/Phrase -> Body; Transcription -> Transcription;
+// Translation/Secondary/Grammar -> Translation; Tag/Header -> Header. When
+// asTranslation is true (a block's as=translation, mirroring
+// {start-text as=translation}), the primary-text fields resolve Translation
+// instead of Body.
+func baseRoleForField(field string, asTranslation bool) string {
+	switch strings.ToLower(field) {
+	case "source", "content", "main", "question", "answer", "phrase":
+		if asTranslation {
+			return "translation"
+		}
+		return "body"
+	case "transcription":
+		return "transcription"
+	case "translation", "secondary", "grammar":
+		return "translation"
+	case "tag", "header":
+		return "header"
+	default:
+		return "body"
+	}
+}
+
+// Lookup implements SPECS §4's regular (non-styled) resolution chain --
+// field -> extension -> script -> base-role -- returning the Typst font
+// stack (the first declared, most-specific family, then the recommended
+// fallback for the resolved base role; mirrors the pre-existing
+// roleFontPrefix shape). style selects the Strong/Emphasis sub-axis
+// ("strong"/"emphasis"; "" = regular). An empty script SKIPS the
+// script-qualified levels entirely (SPECS §6 footnote: no automatic
+// book-Script inheritance for EPUB/PDF, G1 deferred) and resolves via the
+// base role directly -- this is also how Major-2's fixed-script fields
+// (transcription/translation/grammar) are realized: the CALLER passes
+// their own fixed script ("latn" / ""), never the block's foreign script.
+func (t FontTable) Lookup(script, ext, field, style string) []string {
+	return t.resolve(script, ext, field, style, false)
+}
+
+// LookupTranslation is Lookup's as=translation variant (SPECS §4 footnote):
+// the qualified levels (1-3) still use field's own name unchanged, but the
+// base-role fallback (level 4) resolves primary-text fields (source/
+// content/main/question/answer/phrase) to Translation instead of Body,
+// mirroring {start-text as=translation} (book.typ's textblock role branch).
+func (t FontTable) LookupTranslation(script, ext, field, style string) []string {
+	return t.resolve(script, ext, field, style, true)
+}
+
+func (t FontTable) resolve(script, ext, field, style string, asTranslation bool) []string {
+	script = strings.ToLower(strings.TrimSpace(script))
+	ext = strings.ToLower(strings.TrimSpace(ext))
+	field = strings.ToLower(strings.TrimSpace(field))
+	style = strings.ToLower(strings.TrimSpace(style))
+	baseRole := baseRoleForField(field, asTranslation)
+
+	if style != "" {
+		// Style sub-axis (SPECS §4): try the regular levels with style
+		// appended, then the pure base style role ("Font Strong"/"Font
+		// Emphasis"); fall through to the regular chain below if none is
+		// declared (book.typ's per-block/book-level gate then decides
+		// whether the regular font is an acceptable substitute, §8.4).
+		var candidates []string
+		if script != "" {
+			candidates = append(candidates,
+				slotKey(script, ext, field, style),
+				slotKey(script, ext, style),
+				slotKey(script, style),
+			)
+		}
+		candidates = append(candidates, style)
+		for _, c := range candidates {
+			if fam := t.slots[c]; fam != "" {
+				return []string{fam, recommendedRoleFont[style]}
+			}
+		}
+	}
+
+	var candidates []string
+	if script != "" {
+		candidates = append(candidates,
+			slotKey(script, ext, field),
+			slotKey(script, ext),
+			slotKey(script),
+		)
+	}
+	for _, c := range candidates {
+		if fam := t.slots[c]; fam != "" {
+			return []string{fam, recommendedRoleFont[baseRole]}
+		}
+	}
+	if fam := t.slots[baseRole]; fam != "" {
+		return []string{fam, recommendedRoleFont[baseRole]}
+	}
+	if fb := recommendedRoleFont[baseRole]; fb != "" {
+		return []string{fb}
+	}
+	return nil
+}
+
+// parseFontRoles reads the project's font.css and returns the FontTable
+// every declared "Font ..." @font-face classifies into (SPECS §8.2). The
+// name is kept from the pre-generalization API (only its return type
+// changed, fontRoles -> FontTable) per SPECS §8.2's literal contract.
+func parseFontRoles(stylesheetPaths []string) FontTable {
+	table := FontTable{slots: map[string]string{}}
 	var cssPath string
 	for _, p := range stylesheetPaths {
 		if strings.EqualFold(filepath.Base(p), "font.css") {
@@ -271,11 +527,11 @@ func parseFontRoles(stylesheetPaths []string) fontRoles {
 		}
 	}
 	if cssPath == "" {
-		return roles
+		return table
 	}
 	data, err := os.ReadFile(cssPath)
 	if err != nil {
-		return roles
+		return table
 	}
 	for _, block := range fontFaceRe.FindAllStringSubmatch(string(data), -1) {
 		fam := fontFamilyRe.FindStringSubmatch(block[1])
@@ -283,23 +539,13 @@ func parseFontRoles(stylesheetPaths []string) fontRoles {
 		if fam == nil || loc == nil {
 			continue
 		}
-		name := strings.TrimSpace(loc[1])
-		switch strings.ToLower(strings.TrimSpace(fam[1])) {
-		case "font header":
-			roles.header = name
-		case "font body":
-			roles.body = name
-		case "font transcription":
-			roles.transcription = name
-		case "font translation":
-			roles.translation = name
-		case "font strong":
-			roles.strong = name
-		case "font emphasis":
-			roles.emph = name
+		key, ok := classifyFontFamily(strings.TrimSpace(fam[1]))
+		if !ok {
+			continue
 		}
+		table.slots[key] = strings.TrimSpace(loc[1])
 	}
-	return roles
+	return table
 }
 
 // roleFontPrefix builds the per-role prefix book.typ prepends to its base stack:

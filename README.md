@@ -76,7 +76,7 @@ Paragraph in the source language.
 {end-text}
 ```
 
-**`script` drives direction**: `arab`, `hebr`, and `syrc` scripts → RTL; all others → LTR. The `as=transcription` role is always pinned LTR (romanization). Fonts come from the `font.css` roles already declared in your stylesheet (no per-block font configuration needed).
+**`script` drives direction**: `arab`, `hebr`, and `syrc` scripts → RTL; all others → LTR. The `as=transcription` role is always pinned LTR (romanization). Fonts come from the `font.css` roles declared in your stylesheet — either the plain book-wide roles or, for finer control, per-`script`/`extension`/`field` roles (see [Font configuration](#font-configuration-fontcss) below).
 
 **`{start-text as=source|transcription|translation|grammar lang=... script=...}` ... `{end-text}`**
 
@@ -89,7 +89,7 @@ Unified text block with four roles:
 
 Headings (`h1`–`h3`) inside any text block are centered, and markdown tables span the full text-block width in both outputs. For PDF the direction and font are resolved via `book.typ`'s `#textblock(role:, dir:, ...)` function; for EPUB the class (`text`, `transcription`, `translation`, `grammar`) and `dir` attribute on the wrapper `<div>` drive the matching CSS rules in your stylesheet bundle.
 
-**Block set**: `{start-vocabulary}`, `{start-models}`, `{start-questions}`, `{start-dialog}`, `{start-parallel}`, and `{start-text}` (which also takes `as=`). Validation: an unrecognized `script` value falls back to LTR (no error); an **unknown attribute key**, a **malformed attribute** (missing `=` or unterminated quote), or an **unknown `as=` value** fails the build with a message naming the offending marker.
+**Block set**: `{start-vocabulary}`, `{start-models}`, `{start-questions}`, `{start-dialog}`, `{start-parallel}`, and `{start-text}`. **`as=` roles** are unified across the blocks that carry a source/translation distinction: `{start-text}` takes `as=source|transcription|translation|grammar`; `{start-dialog}` and `{start-questions}` take `as=source|translation` (an `as=translation` block is in the reader's own language — comprehension questions, a translated dialog — and uses the Translation font); `{start-vocabulary}`, `{start-models}`, and `{start-parallel}` reject `as=` because their field languages are fixed. Validation: an unrecognized `script` value falls back to LTR (no error); an **unknown attribute key**, a **malformed attribute** (missing `=` or unterminated quote), or an **`as=` value not accepted by that block** fails the build with a message naming the offending marker.
 
 **`contents-title` project key**: set in `ebook.yml` to override the PDF outline title (default "Contents"):
 
@@ -201,13 +201,54 @@ div.questions > div.questions-group > div.questions-item.paired > div.questions-
 
 The `arab`/`hebr` variants keep the same column order (no reordering under RTL) and right-align the leading column's text (`models-col1`/`questions-col1`, and the question-only paragraph) instead.
 
-#### Font roles (`font.css`)
+#### Font configuration (`font.css`)
 
-`font.css` declares each font role as an `@font-face` whose `font-family` is `Font <Role>` and whose `src: local(...)` names the real installed family for that role — `Font Header`, `Font Body`, `Font Transcription`, `Font Translation`, and (for large scripts) `Font Strong`/`Font Emphasis`. On the EPUB side that name is used directly in CSS (e.g. `font-family: "Font Header", sans-serif`); on the PDF side the same `font.css` (read from `stylesheet.common`) is parsed and each role's `local()` name is prepended to the Typst font stack, so PDF and EPUB pick up the same fonts per role. A role with no matching `@font-face` falls back to a recommended installed family (`Noto Sans` for header, `Gentium` for body/translation/strong/emphasis, `DejaVu Sans` for transcription) so an incomplete `font.css` still renders sensibly.
+`font.css` is the single source of truth for fonts: the EPUB uses its `@font-face` names directly and the PDF (Typst) reads the **same** file (from `stylesheet.common`), so both outputs pick the same font for every slot. Each entry maps a role name to a real installed family via `src: local(...)`. A role with no matching `@font-face` falls back to a recommended installed family (`Noto Sans` header, `Gentium` body/translation/strong/emphasis, `DejaVu Sans` transcription), so an incomplete `font.css` still renders.
 
-`Font Strong`/`Font Emphasis` auto-activate only for "large scripts" — Arabic, Hebrew, CJK, Korean, Japanese, the same script set that triggers the enlarged PDF body size. Synthetic bold/italic renders poorly in these scripts, so bold (`**...**` / `<strong>`/`<b>`) and italic (`*...*` / `<em>`/`<i>`) switch to a distinct substitute font at *normal* weight/style instead of a synthetically thickened or slanted glyph; headings likewise keep `Font Header` but drop synthetic bold. Latin and other non-large scripts are unaffected — real bold/italic stays as-is. When `Font Strong`/`Font Emphasis` are undeclared, both fall back to the body font (`Gentium`), which simply drops the bold/italic distinction rather than inventing an unrelated one.
+**Book-wide roles** — always available, fully backward compatible — name the whole book's fonts:
 
-The ready-made large-script EPUB bundles (`epub-public`'s `src/css/main/{arab,hebr,cjk}/`) declare `Font Strong`/`Font Emphasis` and route `strong`/`b`/`em`/`i` (and `h1`–`h3`) to them at normal weight/style; `cjk` is the one shared bundle for Chinese/Japanese/Korean. The `latn` bundle keeps real bold/italic and declares no `Font Strong`/`Font Emphasis`.
+```css
+@font-face { font-family: "Font Header";        src: local("Noto Sans");  }
+@font-face { font-family: "Font Body";          src: local("Noto Serif"); }
+@font-face { font-family: "Font Transcription"; src: local("Noto Sans");  }
+@font-face { font-family: "Font Translation";   src: local("Noto Serif"); }
+```
+
+**Per-slot fonts.** To give a particular script / block / field its own font, *qualify* the role name. Segments run general → specific, and any may be omitted (an omitted segment applies to all values of that axis):
+
+```
+Font <Script> <Extension> <Field> [Strong|Emphasis]
+```
+
+| Axis | Values |
+|---|---|
+| Script | ISO-15924, Titlecase — `Arab` `Hebr` `Latn` … |
+| Extension | `Text` `Dialog` `Questions` `Vocabulary` `Models` `Parallel` |
+| Field | `Source` `Question` `Answer` `Transcription` `Translation` `Grammar` `Phrase` … |
+| Style | `Strong` or `Emphasis` (omitted = regular) |
+
+The six book-wide roles are just the zero-qualifier form of this grammar. Example — a distinct Arabic font for the question vs the answer, and distinct transcription fonts for a text block vs a vocabulary list:
+
+```css
+@font-face { font-family: "Font Arab Questions Question";       src: local("Noto Naskh Arabic"); }
+@font-face { font-family: "Font Arab Questions Answer";         src: local("Amiri");             }
+@font-face { font-family: "Font Latn Text Transcription";       src: local("DejaVu Sans");       }
+@font-face { font-family: "Font Latn Vocabulary Transcription"; src: local("Noto Sans");         }
+```
+
+**Resolution** picks the most specific declared slot, dropping one axis at a time:
+
+```
+Font <S> <E> <F>  →  Font <S> <E>  →  Font <S>  →  Font <base role>  →  generic (serif/sans)
+```
+
+Declare only the slots you want to override — undeclared names are skipped. A **field** always needs its **extension** to resolve: `Font Hebr Vocabulary Phrase` works, `Font Hebr Phrase` never matches.
+
+**How each output applies it.** On EPUB each qualified name becomes a `font-family` fallback list on the field's CSS selector. Fields that follow the block's own script are scoped by an `s-<script>` class the renderer puts on the block wrapper (`<div class="questions s-arab">`), so one book can mix scripts; fields whose language is fixed regardless of the block — transcription (romanization → `latn`) and translation / grammar (the base language) — are matched unscoped. The PDF resolver reproduces the same order from the same `font.css`. Which base role a block's main text plays follows its `as=` role (`source`→Body, `translation`→Translation, `transcription`→Transcription); a `dialog`/`questions` block marked `as=translation` also emits an `as-translation` class so EPUB matches the PDF.
+
+**Strong / Emphasis.** For large scripts (Arabic, Hebrew, CJK, Korean, Japanese) synthetic bold/italic renders poorly, so bold (`**…**` / `<strong>`/`<b>`) and italic (`*…*` / `<em>`/`<i>`) switch to the resolved `Strong`/`Emphasis` slot at *normal* weight/style; Latin and other scripts keep real bold/italic. The switch is decided **per field, by that field's resolved script** — so a Latin translation inside an Arabic block still gets ordinary Latin bold, not an Arabic strong face. Declare `Font <Script> Strong`/`Emphasis` (or plain `Font Strong`/`Font Emphasis`) to choose the substitute; when undeclared, bold/italic simply falls back to the regular resolved font.
+
+The ready-made bundles under `epub-public`'s `src/css/main/{arab,hebr,latn}/` show the full pattern — a `font.css` palette plus the per-component CSS chains that spell out these fallback lists.
 
 ## `scanbook-cli`
 

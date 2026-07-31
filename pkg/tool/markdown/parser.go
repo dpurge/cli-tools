@@ -110,8 +110,11 @@ func (b *vocabularyParser) Open(parent gast.Node, reader text.Reader, pc parser.
 	if err != nil {
 		n.Err = err
 	} else {
+		// SPECS §5: vocabulary's field languages are fixed (phrase=foreign,
+		// translation=base), so as= is rejected entirely, not just out-of-set
+		// values — this avoids a no-op attribute that "exists but does nothing".
 		if attrs.As != "" {
-			n.Err = fmt.Errorf("attribute as= is not valid on {start-vocabulary}")
+			n.Err = fmt.Errorf("as= not applicable to {start-vocabulary}: its field languages are fixed")
 		}
 		n.Lang = attrs.Lang
 		n.Script = attrs.Script
@@ -194,9 +197,19 @@ func (b *dialogParser) Open(parent gast.Node, reader text.Reader, pc parser.Cont
 	if err != nil {
 		n.Err = err
 	} else {
-		if attrs.As != "" {
-			n.Err = fmt.Errorf("attribute as= is not valid on {start-dialog}")
+		// SPECS §5: dialog unifies onto as=source|translation (default
+		// source) — accepted values are a STRICT SUBSET of the shared
+		// attr.go grammar (source/transcription/translation/grammar), so an
+		// in-grammar-but-not-accepted-here value (transcription/grammar)
+		// needs its own precise, block-specific error naming dialog's set.
+		as := attrs.As
+		if as == "" {
+			as = "source"
 		}
+		if as != "source" && as != "translation" {
+			n.Err = fmt.Errorf("as=%q is not valid on {start-dialog}: must be source|translation", as)
+		}
+		n.As = as
 		n.Lang = attrs.Lang
 		n.Script = attrs.Script
 	}
@@ -209,7 +222,16 @@ func (b *dialogParser) Continue(node gast.Node, reader text.Reader, pc parser.Co
 
 func (b *dialogParser) Close(node gast.Node, reader text.Reader, pc parser.Context) {
 	n := node.(*Dialog)
-	n.Items, n.Err = parseDialogItems(rawBlockText(node, reader))
+	items, err := parseDialogItems(rawBlockText(node, reader))
+	n.Items = items
+	// Preserve an Open-time error (malformed attribute, or the new as=
+	// validation, SPECS §5): Close previously always overwrote n.Err from
+	// parseDialogItems, silently discarding it whenever the content itself
+	// parsed without a bad-indentation error — a pre-existing bug this
+	// increment's as= error-surfacing acceptance criterion depends on.
+	if n.Err == nil {
+		n.Err = err
+	}
 }
 
 func (b *dialogParser) CanInterruptParagraph() bool { return true }
@@ -315,8 +337,10 @@ func (b *parallelParser) Open(parent gast.Node, reader text.Reader, pc parser.Co
 	if err != nil {
 		n.Err = err
 	} else {
+		// SPECS §5: parallel's main/secondary columns already carry both
+		// languages, so as= is rejected entirely, with a clearer message.
 		if attrs.As != "" {
-			n.Err = fmt.Errorf("attribute as= is not valid on {start-parallel}")
+			n.Err = fmt.Errorf("as= not applicable to {start-parallel}: its field languages are fixed")
 		}
 		n.Lang = attrs.Lang
 		n.Script = attrs.Script
@@ -389,8 +413,10 @@ func (b *modelsParser) Open(parent gast.Node, reader text.Reader, pc parser.Cont
 	if err != nil {
 		n.Err = err
 	} else {
+		// SPECS §5: models' field languages are fixed (like vocabulary), so
+		// as= is rejected entirely, with a clearer message.
 		if attrs.As != "" {
-			n.Err = fmt.Errorf("attribute as= is not valid on {start-models}")
+			n.Err = fmt.Errorf("as= not applicable to {start-models}: its field languages are fixed")
 		}
 		n.Lang = attrs.Lang
 		n.Script = attrs.Script
@@ -472,9 +498,17 @@ func (b *questionsParser) Open(parent gast.Node, reader text.Reader, pc parser.C
 	if err != nil {
 		n.Err = err
 	} else {
-		if attrs.As != "" {
-			n.Err = fmt.Errorf("attribute as= is not valid on {start-questions}")
+		// SPECS §5: questions unifies onto as=source|translation (default
+		// source), mirroring dialog — see dialogParser.Open's comment for
+		// why this is a stricter subset of the shared attr.go grammar.
+		as := attrs.As
+		if as == "" {
+			as = "source"
 		}
+		if as != "source" && as != "translation" {
+			n.Err = fmt.Errorf("as=%q is not valid on {start-questions}: must be source|translation", as)
+		}
+		n.As = as
 		n.Lang = attrs.Lang
 		n.Script = attrs.Script
 	}

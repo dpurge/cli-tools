@@ -1,6 +1,7 @@
 package markdown_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dpurge/cli-tools/pkg/tool/markdown"
@@ -92,5 +93,21 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 				t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), tc.want)
 			}
 		})
+	}
+}
+
+// TestVocabulary_As_Rejected covers SPECS §5: vocabulary's field languages
+// are fixed (phrase=foreign, translation=base), so as= is rejected
+// entirely — even an in-grammar value like "source" — with a clearer
+// message than the pre-unification blanket rejection.
+func TestVocabulary_As_Rejected(t *testing.T) {
+	input := "{start-vocabulary as=source}\nphrase = translation\n{end-vocabulary}\n"
+	_, err := markdown.ToHTML([]byte(input))
+	if err == nil {
+		t.Fatalf("ToHTML() expected an error for as= on {start-vocabulary}, got nil")
+	}
+	wantErr := "as= not applicable to {start-vocabulary}: its field languages are fixed"
+	if !strings.Contains(err.Error(), wantErr) {
+		t.Fatalf("ToHTML() error = %q, want substring %q", err.Error(), wantErr)
 	}
 }

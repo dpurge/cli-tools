@@ -1,6 +1,7 @@
 package markdown_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/dpurge/cli-tools/pkg/tool/markdown"
@@ -53,5 +54,104 @@ func TestToHTML_Dialog_Golden(t *testing.T) {
 	}
 	if string(got) != want {
 		t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+}
+
+// TestDialog_As_Unification covers SPECS §5's as= unification for
+// {start-dialog}: source (default, implicit) and translation are accepted;
+// any other in-grammar value (transcription/grammar, valid on {start-text}
+// but not here) is a build error naming dialog's accepted set.
+func TestDialog_As_Unification(t *testing.T) {
+	tests := []struct {
+		name    string
+		input   string
+		wantErr string // substring; empty means no error expected
+	}{
+		{
+			name:  "as=source accepted (explicit)",
+			input: "{start-dialog as=source}\n--:\n  Hi.\n{end-dialog}\n",
+		},
+		{
+			name:  "as=translation accepted",
+			input: "{start-dialog as=translation}\n--:\n  Hi.\n{end-dialog}\n",
+		},
+		{
+			name:  "as omitted defaults to source (no error)",
+			input: "{start-dialog}\n--:\n  Hi.\n{end-dialog}\n",
+		},
+		{
+			name:    "as=transcription rejected with dialog's accepted set named",
+			input:   "{start-dialog as=transcription}\n--:\n  Hi.\n{end-dialog}\n",
+			wantErr: `as="transcription" is not valid on {start-dialog}: must be source|translation`,
+		},
+		{
+			name:    "as=grammar rejected with dialog's accepted set named",
+			input:   "{start-dialog as=grammar}\n--:\n  Hi.\n{end-dialog}\n",
+			wantErr: `as="grammar" is not valid on {start-dialog}: must be source|translation`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := markdown.ToHTML([]byte(tc.input))
+			if tc.wantErr == "" {
+				if err != nil {
+					t.Fatalf("ToHTML() unexpected error: %v", err)
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("ToHTML() expected an error containing %q, got nil", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Fatalf("ToHTML() error = %q, want substring %q", err.Error(), tc.wantErr)
+			}
+		})
+	}
+}
+
+// TestDialog_AsTranslation_EPUBClassToken covers the FIX-2/ASR-4 code-review
+// finding: renderer.go emitted `s-<script>` but no `as=` hook, so PDF's
+// as=translation Body->Translation swap (SPECS §4.1) silently failed to
+// mirror into EPUB (dialog's wrapper class is always "dialog" regardless of
+// as=, unlike text's class-per-role). The wrapper now also carries an
+// "as-<value>" token (SPECS §7.1) so component CSS can apply the same swap;
+// as=source (default or explicit) emits no as-* token at all.
+func TestDialog_AsTranslation_EPUBClassToken(t *testing.T) {
+	tests := []struct {
+		name       string
+		input      string
+		wantSubstr string
+		wantAbsent string
+	}{
+		{
+			name:       "as=translation emits as-translation token",
+			input:      "{start-dialog as=translation}\n--:\n  Hi.\n{end-dialog}\n",
+			wantSubstr: `<div class="dialog as-translation" dir="ltr">`,
+		},
+		{
+			name:       "as omitted (default source) emits no as-* token",
+			input:      "{start-dialog}\n--:\n  Hi.\n{end-dialog}\n",
+			wantAbsent: "as-",
+		},
+		{
+			name:       "as=source (explicit) emits no as-* token",
+			input:      "{start-dialog as=source}\n--:\n  Hi.\n{end-dialog}\n",
+			wantAbsent: "as-",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := markdown.ToHTML([]byte(tc.input))
+			if err != nil {
+				t.Fatalf("ToHTML() unexpected error: %v", err)
+			}
+			if tc.wantSubstr != "" && !strings.Contains(string(got), tc.wantSubstr) {
+				t.Fatalf("ToHTML() = %q, want substring %q", string(got), tc.wantSubstr)
+			}
+			if tc.wantAbsent != "" && strings.Contains(string(got), tc.wantAbsent) {
+				t.Fatalf("ToHTML() = %q, want NO substring %q", string(got), tc.wantAbsent)
+			}
+		})
 	}
 }

@@ -73,12 +73,15 @@ type DialogItem struct {
 // or when the marker attributes are malformed; the renderer surfaces it
 // as a real error out of ToHTML/FileToHTML. Lang and Script are populated
 // from marker attributes (M1); direction/font wiring uses them in M2.
+// As unifies the block on the shared as= attribute grammar (SPECS §5):
+// accepted values are "source" (default) and "translation" only — dialog
+// has no transcription/grammar concept, unlike {start-text}.
 type Dialog struct {
 	gast.BaseBlock
 
-	Lang, Script string
-	Items        []DialogItem
-	Err          error
+	Lang, Script, As string
+	Items            []DialogItem
+	Err              error
 }
 
 // Kind implements ast.Node.
@@ -166,13 +169,14 @@ type QuestionItem struct {
 // Questions is the block node for a `{start-questions}` ... `{end-questions}`
 // block. Lang and Script are populated from marker attributes (M1);
 // direction/font wiring uses them in M2. Err is set when marker attributes
-// are malformed.
+// are malformed. As unifies the block on the shared as= attribute grammar
+// (SPECS §5): accepted values are "source" (default) and "translation" only.
 type Questions struct {
 	gast.BaseBlock
 
-	Lang, Script string
-	Err          error
-	Items        []QuestionItem
+	Lang, Script, As string
+	Err              error
+	Items            []QuestionItem
 }
 
 // Kind implements ast.Node.

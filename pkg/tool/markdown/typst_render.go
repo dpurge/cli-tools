@@ -466,7 +466,9 @@ func renderVocabularyTypst(w util.BufWriter, source []byte, node gast.Node, ente
 	dir := blockDirection(n.Script)
 	io.WriteString(w, "#vocabulary(dir: ")
 	io.WriteString(w, dir)
-	io.WriteString(w, ",\n")
+	io.WriteString(w, `, script: "`)
+	io.WriteString(w, escapeTypstString(n.Script))
+	io.WriteString(w, "\",\n")
 	for _, item := range n.Items {
 		io.WriteString(w, `  (phrase: "`)
 		io.WriteString(w, escapeTypstString(item.Phrase))
@@ -499,9 +501,17 @@ func renderDialogTypst(w util.BufWriter, source []byte, node gast.Node, entering
 	}
 
 	dir := blockDirection(n.Script)
+	role := n.As
+	if role == "" {
+		role = "source"
+	}
 	io.WriteString(w, "#dialog(dir: ")
 	io.WriteString(w, dir)
-	io.WriteString(w, ",\n")
+	io.WriteString(w, `, script: "`)
+	io.WriteString(w, escapeTypstString(n.Script))
+	io.WriteString(w, `", role: "`)
+	io.WriteString(w, escapeTypstString(role))
+	io.WriteString(w, "\",\n")
 	for _, item := range n.Items {
 		content, err := ToTypst([]byte(item.Content))
 		if err != nil {
@@ -535,7 +545,9 @@ func renderParallelTypst(w util.BufWriter, source []byte, node gast.Node, enteri
 	secondaryDir := blockDirection(n.Script)
 	io.WriteString(w, "#parallel(secondary-dir: ")
 	io.WriteString(w, secondaryDir)
-	io.WriteString(w, ",\n")
+	io.WriteString(w, `, script: "`)
+	io.WriteString(w, escapeTypstString(n.Script))
+	io.WriteString(w, "\",\n")
 	for _, row := range n.Rows {
 		mainContent, err := ToTypst([]byte(row.MainRaw))
 		if err != nil {
@@ -575,7 +587,9 @@ func renderModelsTypst(w util.BufWriter, source []byte, node gast.Node, entering
 	dir := blockDirection(n.Script)
 	io.WriteString(w, "#models(dir: ")
 	io.WriteString(w, dir)
-	io.WriteString(w, ",\n")
+	io.WriteString(w, `, script: "`)
+	io.WriteString(w, escapeTypstString(n.Script))
+	io.WriteString(w, "\",\n")
 	for _, item := range n.Items {
 		io.WriteString(w, `  (phrase: "`)
 		io.WriteString(w, escapeTypstString(item.Phrase))
@@ -617,7 +631,9 @@ func renderTextblockTypst(w util.BufWriter, source []byte, node gast.Node, enter
 	io.WriteString(w, as)
 	io.WriteString(w, "\", dir: ")
 	io.WriteString(w, dir)
-	io.WriteString(w, ", [\n")
+	io.WriteString(w, `, script: "`)
+	io.WriteString(w, escapeTypstString(n.Script))
+	io.WriteString(w, "\", [\n")
 	if n.Raw != "" {
 		content, err := ToTypst([]byte(n.Raw))
 		if err != nil {
@@ -645,9 +661,17 @@ func renderQuestionsTypst(w util.BufWriter, source []byte, node gast.Node, enter
 	}
 
 	dir := blockDirection(n.Script)
+	role := n.As
+	if role == "" {
+		role = "source"
+	}
 	io.WriteString(w, "#questions(dir: ")
 	io.WriteString(w, dir)
-	io.WriteString(w, ",\n")
+	io.WriteString(w, `, script: "`)
+	io.WriteString(w, escapeTypstString(n.Script))
+	io.WriteString(w, `", role: "`)
+	io.WriteString(w, escapeTypstString(role))
+	io.WriteString(w, "\",\n")
 	for _, item := range n.Items {
 		io.WriteString(w, `  (question: "`)
 		io.WriteString(w, escapeTypstString(item.Question))

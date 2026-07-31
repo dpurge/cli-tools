@@ -91,7 +91,7 @@ func TestToHTML_Parallel_Golden(t *testing.T) {
 				"---\n" +
 				"Secondary text.\n" +
 				"{end-parallel}\n",
-			want: "<div class=\"parallel\">\n" +
+			want: "<div class=\"parallel s-arab\">\n" +
 				"<div class=\"parallel-row\">\n" +
 				"<div class=\"parallel-cell main\">\n" +
 				"<p>Main text.</p>\n" +
@@ -133,5 +133,20 @@ func TestToHTML_Parallel_MainCellFirstCharNotDropped(t *testing.T) {
 	}
 	if !strings.Contains(string(got), "Zebra leads the main cell.") {
 		t.Fatalf("main cell's first character was dropped (D2 regression), got: %q", string(got))
+	}
+}
+
+// TestParallel_As_Rejected covers SPECS §5: parallel's main/secondary
+// columns already carry both languages, so as= is rejected entirely, with
+// a clearer message than the pre-unification blanket rejection.
+func TestParallel_As_Rejected(t *testing.T) {
+	input := "{start-parallel as=source}\nMain.\n{end-parallel}\n"
+	_, err := markdown.ToHTML([]byte(input))
+	if err == nil {
+		t.Fatalf("ToHTML() expected an error for as= on {start-parallel}, got nil")
+	}
+	wantErr := "as= not applicable to {start-parallel}: its field languages are fixed"
+	if !strings.Contains(err.Error(), wantErr) {
+		t.Fatalf("ToHTML() error = %q, want substring %q", err.Error(), wantErr)
 	}
 }

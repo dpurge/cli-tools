@@ -658,17 +658,22 @@ func TestParseFontRoles(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := parseFontRoles([]string{filepath.Join(dir, "base.css"), path})
-	want := fontRoles{
-		header: "Helvetica", body: "Amiri Regular", transcription: "DejaVu Sans", translation: "Times New Roman",
-		strong: "Amiri Bold", emph: "Amiri Slanted",
+	want := map[string]string{
+		"header": "Helvetica", "body": "Amiri Regular", "transcription": "DejaVu Sans",
+		"translation": "Times New Roman", "strong": "Amiri Bold", "emphasis": "Amiri Slanted",
 	}
-	if got != want {
-		t.Errorf("parseFontRoles = %+v, want %+v", got, want)
+	for role, fam := range want {
+		if got.BaseRole(role) != fam {
+			t.Errorf("parseFontRoles(...).BaseRole(%q) = %q, want %q", role, got.BaseRole(role), fam)
+		}
 	}
 
-	// No font.css among the paths => all empty.
-	if r := parseFontRoles([]string{filepath.Join(dir, "base.css")}); r != (fontRoles{}) {
-		t.Errorf("parseFontRoles(no font.css) = %+v, want zero", r)
+	// No font.css among the paths => all empty (zero-value FontTable).
+	r := parseFontRoles([]string{filepath.Join(dir, "base.css")})
+	for role := range want {
+		if got := r.BaseRole(role); got != "" {
+			t.Errorf("parseFontRoles(no font.css).BaseRole(%q) = %q, want \"\"", role, got)
+		}
 	}
 }
 

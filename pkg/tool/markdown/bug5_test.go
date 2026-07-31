@@ -21,8 +21,9 @@ func TestBug5_RTLContainerLTRMetadataFields(t *testing.T) {
 		}
 		out := string(got)
 
-		// Container must be RTL (D9).
-		if !strings.Contains(out, `<div class="vocabulary" dir="rtl">`) {
+		// Container must be RTL (D9); also carries the new s-arab class
+		// token (SPECS §7.1, INC3), sourced from the block's own script.
+		if !strings.Contains(out, `<div class="vocabulary s-arab" dir="rtl">`) {
 			t.Errorf("expected RTL container div, got:\n%s", out)
 		}
 		// Grammar/transcription/translation spans must remain LTR (bug #5).
@@ -45,8 +46,9 @@ func TestBug5_RTLContainerLTRMetadataFields(t *testing.T) {
 		}
 		out := string(got)
 
-		// Container must be RTL (D9).
-		if !strings.Contains(out, `<div class="models" dir="rtl">`) {
+		// Container must be RTL (D9); also carries the new s-arab class
+		// token (SPECS §7.1, INC3), sourced from the block's own script.
+		if !strings.Contains(out, `<div class="models s-arab" dir="rtl">`) {
 			t.Errorf("expected RTL models container div, got:\n%s", out)
 		}
 		// Transcription and translation spans must remain LTR (bug #5).

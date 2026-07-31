@@ -13,6 +13,37 @@ import (
 // entire wrapper on the "entering" call and does nothing on the matching
 // "exiting" call.
 
+// scriptClass returns the SPECS §7.1 "s-<script>" class token, sourced
+// directly from the block's own n.Script (with a leading space, ready to
+// append to a class attribute) — e.g. "arab" -> " s-arab". Empty script
+// returns "" (no token): a single-language block/book then applies only
+// its base-role fonts, unaffected by this hook. This is the ONLY new EPUB
+// hook `dir` can't provide on its own (`dir` cannot distinguish arab from
+// hebr, both rtl), letting component CSS target `.s-<script> .field { ... }`
+// for a two-language book (SPECS §4/§7.2).
+func scriptClass(script string) string {
+	if script == "" {
+		return ""
+	}
+	return " s-" + script
+}
+
+// asClass returns the SPECS §7.1 "as-<value>" class token for a block that
+// carries the shared as= attribute (text/dialog/questions), e.g.
+// "translation" -> " as-translation". Empty or "source" (the default role)
+// returns "" (no token): the block's default Body-role CSS then applies
+// unchanged. WITHOUT this hook, EPUB has no way to tell that a dialog/
+// questions block is as=translation (unlike text, whose wrapper class
+// already changes name per as=), so PDF's as=translation Body->Translation
+// swap (SPECS §4.1) silently failed to mirror into EPUB (ASR-4 divergence,
+// code-review finding #4).
+func asClass(as string) string {
+	if as == "" || as == "source" {
+		return ""
+	}
+	return " as-" + as
+}
+
 // renderVocabulary emits the byte-identical `<div class="vocabulary">`
 // wrapper. Spans are written raw (no HTML-escaping), matching the ported
 // gomarkdown renderer.
@@ -26,7 +57,9 @@ func renderVocabulary(w util.BufWriter, source []byte, node gast.Node, entering 
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, "<div class=\"vocabulary\" dir=\"")
+	io.WriteString(w, "<div class=\"vocabulary")
+	io.WriteString(w, scriptClass(n.Script))
+	io.WriteString(w, "\" dir=\"")
 	io.WriteString(w, dir)
 	io.WriteString(w, "\">\n")
 	for _, item := range n.Items {
@@ -73,7 +106,10 @@ func renderDialog(w util.BufWriter, source []byte, node gast.Node, entering bool
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, "<div class=\"dialog\" dir=\"")
+	io.WriteString(w, "<div class=\"dialog")
+	io.WriteString(w, scriptClass(n.Script))
+	io.WriteString(w, asClass(n.As))
+	io.WriteString(w, "\" dir=\"")
 	io.WriteString(w, dir)
 	io.WriteString(w, "\">\n")
 	for _, item := range n.Items {
@@ -102,7 +138,9 @@ func renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bo
 		return gast.WalkStop, n.Err
 	}
 
-	io.WriteString(w, "<div class=\"parallel\">\n")
+	io.WriteString(w, "<div class=\"parallel")
+	io.WriteString(w, scriptClass(n.Script))
+	io.WriteString(w, "\">\n")
 	for _, row := range n.Rows {
 		io.WriteString(w, "<div class=\"parallel-row\">\n")
 		if row.MainRaw != "" {
@@ -162,7 +200,9 @@ func renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, "<div class=\"models\" dir=\"")
+	io.WriteString(w, "<div class=\"models")
+	io.WriteString(w, scriptClass(n.Script))
+	io.WriteString(w, "\" dir=\"")
 	io.WriteString(w, dir)
 	io.WriteString(w, "\">\n")
 	inGroup := false
@@ -241,7 +281,10 @@ func renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering b
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, "<div class=\"questions\" dir=\"")
+	io.WriteString(w, "<div class=\"questions")
+	io.WriteString(w, scriptClass(n.Script))
+	io.WriteString(w, asClass(n.As))
+	io.WriteString(w, "\" dir=\"")
 	io.WriteString(w, dir)
 	io.WriteString(w, "\">\n")
 	inGroup := false
@@ -313,6 +356,8 @@ func renderTextblock(w util.BufWriter, source []byte, node gast.Node, entering b
 	}
 	io.WriteString(w, "<div class=\"")
 	io.WriteString(w, cls)
+	io.WriteString(w, scriptClass(n.Script))
+	io.WriteString(w, asClass(as))
 	io.WriteString(w, "\" dir=\"")
 	io.WriteString(w, dir)
 	io.WriteString(w, "\">\n")
