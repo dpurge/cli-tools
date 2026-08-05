@@ -20,49 +20,56 @@ func TestToHTML_Text_Golden(t *testing.T) {
 		{
 			name:  "source LTR script (latn) → class text dir ltr",
 			input: "{start-text as=source script=latn}\nHello world.\n{end-text}\n",
-			want: "<div class=\"text s-latn\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">T</span></div>\n" +
+				"<div class=\"text s-latn\" dir=\"ltr\">\n" +
 				"<p>Hello world.</p>\n" +
 				"</div>\n",
 		},
 		{
 			name:  "source RTL script (arab) → class text dir rtl",
 			input: "{start-text as=source script=arab}\nمرحبا\n{end-text}\n",
-			want: "<div class=\"text s-arab\" dir=\"rtl\">\n" +
+			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">T</span></div>\n" +
+				"<div class=\"text s-arab\" dir=\"rtl\">\n" +
 				"<p>مرحبا</p>\n" +
 				"</div>\n",
 		},
 		{
 			name:  "transcription always ltr regardless of script",
 			input: "{start-text as=transcription script=arab}\nmarhaban\n{end-text}\n",
-			want: "<div class=\"transcription s-arab as-transcription\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">T</span></div>\n" +
+				"<div class=\"transcription s-arab as-transcription\" dir=\"ltr\">\n" +
 				"<p>marhaban</p>\n" +
 				"</div>\n",
 		},
 		{
 			name:  "translation LTR script (latn) → class translation dir ltr",
 			input: "{start-text as=translation script=latn}\nHello in Latin.\n{end-text}\n",
-			want: "<div class=\"translation s-latn as-translation\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">T</span></div>\n" +
+				"<div class=\"translation s-latn as-translation\" dir=\"ltr\">\n" +
 				"<p>Hello in Latin.</p>\n" +
 				"</div>\n",
 		},
 		{
 			name:  "translation RTL script (arab) → class translation dir rtl (D9)",
 			input: "{start-text as=translation script=arab}\nترجمة\n{end-text}\n",
-			want: "<div class=\"translation s-arab as-translation\" dir=\"rtl\">\n" +
+			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">T</span></div>\n" +
+				"<div class=\"translation s-arab as-translation\" dir=\"rtl\">\n" +
 				"<p>ترجمة</p>\n" +
 				"</div>\n",
 		},
 		{
 			name:  "grammar LTR script (latn) → class grammar dir ltr",
 			input: "{start-text as=grammar script=latn}\nProse explanation.\n{end-text}\n",
-			want: "<div class=\"grammar s-latn as-grammar\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">T</span></div>\n" +
+				"<div class=\"grammar s-latn as-grammar\" dir=\"ltr\">\n" +
 				"<p>Prose explanation.</p>\n" +
 				"</div>\n",
 		},
 		{
 			name:  "source without script attr → dir ltr (default)",
 			input: "{start-text as=source}\nDefault direction.\n{end-text}\n",
-			want: "<div class=\"text\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">T</span></div>\n" +
+				"<div class=\"text\" dir=\"ltr\">\n" +
 				"<p>Default direction.</p>\n" +
 				"</div>\n",
 		},
@@ -70,7 +77,7 @@ func TestToHTML_Text_Golden(t *testing.T) {
 			name:  "heading inside source block is recursed through ToHTML",
 			input: "{start-text as=source}\n# Section Title\n\nBody text.\n{end-text}\n",
 			want: "<div class=\"text\" dir=\"ltr\">\n" +
-				"<h1 id=\"section-title\">Section Title</h1>\n" +
+				"<h1 id=\"section-title\" class=\"block-title\"><span class=\"ct-badge\">T</span>Section Title</h1>\n" +
 				"<p>Body text.</p>\n" +
 				"</div>\n",
 		},
@@ -117,42 +124,42 @@ func TestToTypst_Text_Golden(t *testing.T) {
 		{
 			name:  "source LTR script (latn) → role source dir ltr",
 			input: "{start-text as=source script=latn}\nHello world.\n{end-text}\n",
-			want:  "#textblock(role: \"source\", dir: ltr, script: \"latn\", [\nHello world\\.\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"source\", dir: ltr, script: \"latn\", [\nHello world\\.\n\n])\n\n",
 		},
 		{
 			name:  "source RTL script (arab) → role source dir rtl",
 			input: "{start-text as=source script=arab}\nمرحبا\n{end-text}\n",
-			want:  "#textblock(role: \"source\", dir: rtl, script: \"arab\", [\nمرحبا\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em, align(right)[#_ctbadge(\"T\")])\n\n#textblock(role: \"source\", dir: rtl, script: \"arab\", [\nمرحبا\n\n])\n\n",
 		},
 		{
 			name:  "transcription always ltr (pinned romanization, D9)",
 			input: "{start-text as=transcription script=arab}\nmarhaban\n{end-text}\n",
-			want:  "#textblock(role: \"transcription\", dir: ltr, script: \"arab\", [\nmarhaban\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"transcription\", dir: ltr, script: \"arab\", [\nmarhaban\n\n])\n\n",
 		},
 		{
 			name:  "translation LTR script (latn) → dir ltr",
 			input: "{start-text as=translation script=latn}\nHello in Latin.\n{end-text}\n",
-			want:  "#textblock(role: \"translation\", dir: ltr, script: \"latn\", [\nHello in Latin\\.\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"translation\", dir: ltr, script: \"latn\", [\nHello in Latin\\.\n\n])\n\n",
 		},
 		{
 			name:  "translation RTL script (arab) → dir rtl (D9)",
 			input: "{start-text as=translation script=arab}\nترجمة\n{end-text}\n",
-			want:  "#textblock(role: \"translation\", dir: rtl, script: \"arab\", [\nترجمة\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em, align(right)[#_ctbadge(\"T\")])\n\n#textblock(role: \"translation\", dir: rtl, script: \"arab\", [\nترجمة\n\n])\n\n",
 		},
 		{
 			name:  "grammar LTR script (latn) → dir ltr",
 			input: "{start-text as=grammar script=latn}\nProse explanation.\n{end-text}\n",
-			want:  "#textblock(role: \"grammar\", dir: ltr, script: \"latn\", [\nProse explanation\\.\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"grammar\", dir: ltr, script: \"latn\", [\nProse explanation\\.\n\n])\n\n",
 		},
 		{
 			name:  "source no script → dir ltr (default)",
 			input: "{start-text as=source}\nDefault direction.\n{end-text}\n",
-			want:  "#textblock(role: \"source\", dir: ltr, script: \"\", [\nDefault direction\\.\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"source\", dir: ltr, script: \"\", [\nDefault direction\\.\n\n])\n\n",
 		},
 		{
 			name:  "heading inside source block is recursed via ToTypst",
 			input: "{start-text as=source script=latn}\n# Section\n\nBody.\n{end-text}\n",
-			want:  "#textblock(role: \"source\", dir: ltr, script: \"latn\", [\n= Section\n\nBody\\.\n\n])\n\n",
+			want:  "#textblock(role: \"source\", dir: ltr, script: \"latn\", [\n= #_ctbadge(\"T\") Section\n\nBody\\.\n\n])\n\n",
 		},
 		{
 			// Grammar tables are emitted with integer columns so that book.typ's
@@ -160,7 +167,7 @@ func TestToTypst_Text_Golden(t *testing.T) {
 			// (1fr,) * it.columns fractional tracks, making the table full-width.
 			name:  "grammar with a table: integer columns emitted (book.typ transforms to fractional)",
 			input: "{start-text as=grammar script=latn}\n| A | B |\n|---|---|\n| 1 | 2 |\n{end-text}\n",
-			want:  "#textblock(role: \"grammar\", dir: ltr, script: \"latn\", [\n#table(columns: (1fr, 1fr), align: (auto, auto),\n[A],\n[B],\n[1],\n[2],\n)\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"grammar\", dir: ltr, script: \"latn\", [\n#table(columns: (1fr, 1fr), align: (auto, auto),\n[A],\n[B],\n[1],\n[2],\n)\n\n])\n\n",
 		},
 	}
 

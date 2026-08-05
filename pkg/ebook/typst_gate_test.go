@@ -201,3 +201,111 @@ func TestBookTyp_ModelsPhraseBoldFinalizes(t *testing.T) {
 		t.Errorf("models phrase (non-large script) bold resolved font = %q, want %q (must stay the ambient font -- a bare strong() call is not finalized and would otherwise be re-substituted by the enclosing book-level large-script Strong gate)", got, "ambientfont")
 	}
 }
+
+// --- script-size-markers feature gate tests (SPECS F-SIZE / F-MARK) --------
+
+// typstQueryBool reads a boolean `#metadata(...)` value (typst query --field
+// value) at the given label, mirroring typstQueryFirstFamily's shape handling
+// for a single JSON bool. Used to assert an APPLIED text.size relation from
+// inside a specific run without depending on the pt serialization format.
+func typstQueryBool(t *testing.T, typstPath, typPath, selector string) bool {
+	t.Helper()
+	out, err := exec.Command(typstPath, "query", typPath, selector, "--field", "value").Output()
+	if err != nil {
+		t.Fatalf("typst query %s %s: %v", typPath, selector, err)
+	}
+	var results []json.RawMessage
+	if err := json.Unmarshal(out, &results); err != nil {
+		t.Fatalf("typst query %s: parse %q: %v", selector, out, err)
+	}
+	if len(results) == 0 {
+		t.Fatalf("typst query %s: no results -- metadata marker never rendered", selector)
+	}
+	var b bool
+	if err := json.Unmarshal(results[0], &b); err != nil {
+		t.Fatalf("typst query %s: value %s not a bool: %v", selector, results[0], err)
+	}
+	return b
+}
+
+// TestBookTyp_BadgeCompiles proves the content-type badge (SPECS FR-5) and the
+// exact Typst shapes the renderer now emits (SPECS FR-7) compile clean against
+// the REAL bookTemplate: the `_ctbadge` box (context + header-font pin), a
+// badge-only block (ltr and rtl align(right)), and a badge injected into a
+// heading. Compilation itself is the assertion (compileBookTypGateFixture
+// t.Fatalf's on any error); a warning for the fake seeded font name is ignored.
+func TestBookTyp_BadgeCompiles(t *testing.T) {
+	compileBookTypGateFixture(t, `
+#set text(size: 10pt)
+#_ctbadge("T")
+#block(above: 1.2em, below: 0.5em)[#_ctbadge("V")]
+#block(above: 1.2em, below: 0.5em, align(right)[#_ctbadge("D")])
+= #_ctbadge("T") Heading title
+`)
+}
+
+// TestBookTyp_ForeignScriptEnlargedWhenBookNotLarge is the FR-2/FR-3 regression
+// test: with _sizeFactor 1.5 (a non-large-script book, e.g. project.Script=latn
+// with hans blocks), a large-script (hans) vocabulary phrase enlarges above the
+// 10pt base while a non-large (latn) phrase stays at base. A 12pt threshold
+// discriminates the two (15pt vs 10pt) robustly.
+func TestBookTyp_ForeignScriptEnlargedWhenBookNotLarge(t *testing.T) {
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#set text(size: 10pt)
+#_sizeFactor.update(1.5)
+#vocabulary(script: "hans",
+  (phrase: [P#context [#metadata(text.size > 12pt) <hans-size>]], grammar: "", transcription: "", translation: ""),
+)
+#vocabulary(script: "latn",
+  (phrase: [P#context [#metadata(text.size < 12pt) <latn-size>]], grammar: "", transcription: "", translation: ""),
+)
+`)
+	if !typstQueryBool(t, typstPath, typPath, "<hans-size>") {
+		t.Errorf("hans (large-script) vocabulary phrase was NOT enlarged (want applied text.size > 12pt at _sizeFactor 1.5 over a 10pt base)")
+	}
+	if !typstQueryBool(t, typstPath, typPath, "<latn-size>") {
+		t.Errorf("latn (non-large) vocabulary phrase must stay at base (want applied text.size < 12pt)")
+	}
+}
+
+// TestBookTyp_ForeignScriptNotDoubleEnlargedWhenBookLarge is the FR-2 no-
+// regression guard: a whole-book large-script book sets _sizeFactor 1.0 (its
+// base is ALREADY size-large), so per-block enlargement is a no-op — a hans
+// phrase must stay at base, never double-enlarge.
+func TestBookTyp_ForeignScriptNotDoubleEnlargedWhenBookLarge(t *testing.T) {
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#set text(size: 10pt)
+#_sizeFactor.update(1.0)
+#vocabulary(script: "hans",
+  (phrase: [P#context [#metadata(text.size < 12pt) <hans-size-1x>]], grammar: "", transcription: "", translation: ""),
+)
+`)
+	if !typstQueryBool(t, typstPath, typPath, "<hans-size-1x>") {
+		t.Errorf("hans vocabulary phrase double-enlarged when the book is already large-script (want applied text.size < 12pt at _sizeFactor 1.0 over a 10pt base)")
+	}
+}
+
+// TestBookTyp_AsTranslationNotEnlarged verifies the FR-3 / FR-4 `as=translation`
+// gate on the Typst side (the mirror of CSS's `.s-hans:not(.as-translation)`):
+// an as=translation block resolves familyScript="" so `_foreignSize` returns 1em
+// even when the block's OWN script is large (hans) — the translated content
+// stays at base. A companion as=source dialog in the SAME large script DOES
+// enlarge, proving the gate discriminates on `as=`, not on the raw script.
+func TestBookTyp_AsTranslationNotEnlarged(t *testing.T) {
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#set text(size: 10pt)
+#_sizeFactor.update(1.5)
+#dialog(script: "hans", role: "translation",
+  (header: "H", content: [C#context [#metadata(text.size < 12pt) <trans-content>]]),
+)
+#dialog(script: "hans", role: "source",
+  (header: "H", content: [C#context [#metadata(text.size > 12pt) <source-content>]]),
+)
+`)
+	if !typstQueryBool(t, typstPath, typPath, "<trans-content>") {
+		t.Errorf("as=translation dialog content was enlarged despite familyScript=\"\" (want base text.size < 12pt, mirroring CSS :not(.as-translation))")
+	}
+	if !typstQueryBool(t, typstPath, typPath, "<source-content>") {
+		t.Errorf("as=source dialog content was NOT enlarged in a large (hans) script (want text.size > 12pt)")
+	}
+}

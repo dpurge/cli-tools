@@ -57,6 +57,7 @@ func renderVocabulary(w util.BufWriter, source []byte, node gast.Node, entering 
 	}
 
 	dir := blockDirection(n.Script)
+	io.WriteString(w, badgeOnlyHTML("V", dir))
 	io.WriteString(w, "<div class=\"vocabulary")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, "\" dir=\"")
@@ -106,6 +107,7 @@ func renderDialog(w util.BufWriter, source []byte, node gast.Node, entering bool
 	}
 
 	dir := blockDirection(n.Script)
+	io.WriteString(w, badgeOnlyHTML("D", dir))
 	io.WriteString(w, "<div class=\"dialog")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, asClass(n.As))
@@ -200,6 +202,7 @@ func renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool
 	}
 
 	dir := blockDirection(n.Script)
+	io.WriteString(w, badgeOnlyHTML("M", dir))
 	io.WriteString(w, "<div class=\"models")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, "\" dir=\"")
@@ -281,6 +284,7 @@ func renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering b
 	}
 
 	dir := blockDirection(n.Script)
+	io.WriteString(w, badgeOnlyHTML("Q", dir))
 	io.WriteString(w, "<div class=\"questions")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, asClass(n.As))
@@ -354,6 +358,22 @@ func renderTextblock(w util.BufWriter, source []byte, node gast.Node, entering b
 	if as == "transcription" {
 		dir = "ltr"
 	}
+	// F-MARK: lift the block's first heading into a "T"-badged title line
+	// (badge injected in place, heading otherwise intact, id preserved); when
+	// the block has no heading, prepend a standalone "T" badge line before the
+	// wrapper.
+	var body string
+	if n.Raw != "" {
+		content, err := ToHTML([]byte(n.Raw))
+		if err != nil {
+			return gast.WalkStop, err
+		}
+		body = string(content)
+	}
+	body, had := injectBadgeIntoFirstHeadingHTML(body, "T")
+	if !had {
+		io.WriteString(w, badgeOnlyHTML("T", dir))
+	}
 	io.WriteString(w, "<div class=\"")
 	io.WriteString(w, cls)
 	io.WriteString(w, scriptClass(n.Script))
@@ -361,13 +381,7 @@ func renderTextblock(w util.BufWriter, source []byte, node gast.Node, entering b
 	io.WriteString(w, "\" dir=\"")
 	io.WriteString(w, dir)
 	io.WriteString(w, "\">\n")
-	if n.Raw != "" {
-		content, err := ToHTML([]byte(n.Raw))
-		if err != nil {
-			return gast.WalkStop, err
-		}
-		w.Write(content)
-	}
+	io.WriteString(w, body)
 	io.WriteString(w, "</div>\n")
 	return gast.WalkContinue, nil
 }

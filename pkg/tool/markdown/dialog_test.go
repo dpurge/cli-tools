@@ -18,42 +18,70 @@ import (
 //     standard-markdown HTML content is accepted at the semantic-equivalence
 //     bar (only the custom wrapper markup is byte-identical).
 func TestToHTML_Dialog_Golden(t *testing.T) {
-	input := "{start-dialog}\n" +
-		"--:\n" +
-		"  Hello there.\n" +
-		"\n" +
-		"  Second **bold** paragraph.\n" +
-		"@Bob:\n" +
-		"  Hi!\n" +
-		"＠李:\n" +
-		"  你好!\n" +
-		"{end-dialog}\n"
-
-	want := "<div class=\"dialog\" dir=\"ltr\">\n" +
-		"<div class=\"dialog-item\">\n" +
-		"<div class=\"dialog-header\">—</div>\n" +
-		"<div class=\"dialog-content\"><p>Hello there.</p>\n" +
-		"<p>Second <strong>bold</strong> paragraph.</p>\n" +
-		"</div>\n" +
-		"</div>\n" +
-		"<div class=\"dialog-item\">\n" +
-		"<div class=\"dialog-header\">Bob:</div>\n" +
-		"<div class=\"dialog-content\"><p>Hi!</p>\n" +
-		"</div>\n" +
-		"</div>\n" +
-		"<div class=\"dialog-item\">\n" +
-		"<div class=\"dialog-header\">李:</div>\n" +
-		"<div class=\"dialog-content\"><p>你好!</p>\n" +
-		"</div>\n" +
-		"</div>\n" +
-		"</div>\n"
-
-	got, err := markdown.ToHTML([]byte(input))
-	if err != nil {
-		t.Fatalf("ToHTML() unexpected error: %v", err)
+	tests := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name: "LTR: anonymous and named turns with multi-paragraph content",
+			input: "{start-dialog}\n" +
+				"--:\n" +
+				"  Hello there.\n" +
+				"\n" +
+				"  Second **bold** paragraph.\n" +
+				"@Bob:\n" +
+				"  Hi!\n" +
+				"＠李:\n" +
+				"  你好!\n" +
+				"{end-dialog}\n",
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">D</span></div>\n" +
+				"<div class=\"dialog\" dir=\"ltr\">\n" +
+				"<div class=\"dialog-item\">\n" +
+				"<div class=\"dialog-header\">—</div>\n" +
+				"<div class=\"dialog-content\"><p>Hello there.</p>\n" +
+				"<p>Second <strong>bold</strong> paragraph.</p>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"<div class=\"dialog-item\">\n" +
+				"<div class=\"dialog-header\">Bob:</div>\n" +
+				"<div class=\"dialog-content\"><p>Hi!</p>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"<div class=\"dialog-item\">\n" +
+				"<div class=\"dialog-header\">李:</div>\n" +
+				"<div class=\"dialog-content\"><p>你好!</p>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
+			// RTL integration golden: script=arab → blockDirection("arab")="rtl"
+			// → badgeOnlyHTML("D","rtl") emits dir="rtl" on the badge div and
+			// the dialog wrapper carries dir="rtl" + s-arab class (NFR-4).
+			name:  "script=arab: RTL badge and wrapper",
+			input: "{start-dialog script=arab}\n--:\n  مرحبا.\n{end-dialog}\n",
+			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">D</span></div>\n" +
+				"<div class=\"dialog s-arab\" dir=\"rtl\">\n" +
+				"<div class=\"dialog-item\">\n" +
+				"<div class=\"dialog-header\">—</div>\n" +
+				"<div class=\"dialog-content\"><p>مرحبا.</p>\n" +
+				"</div>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
 	}
-	if string(got) != want {
-		t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), want)
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := markdown.ToHTML([]byte(tc.input))
+			if err != nil {
+				t.Fatalf("ToHTML() unexpected error: %v", err)
+			}
+			if string(got) != tc.want {
+				t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), tc.want)
+			}
+		})
 	}
 }
 

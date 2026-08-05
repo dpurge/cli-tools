@@ -23,16 +23,31 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 		{
 			name:  "question only, no answer",
 			input: "{start-questions}\nWhat is your name?\n{end-questions}\n",
-			want: "<div class=\"questions\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">Q</span></div>\n" +
+				"<div class=\"questions\" dir=\"ltr\">\n" +
 				"<div class=\"questions-item\">\n" +
 				"<span class=\"questions-question\">What is your name?</span>\n" +
 				"</div>\n" +
 				"</div>\n",
 		},
 		{
+			// RTL integration golden: script=arab → blockDirection("arab")="rtl"
+			// → badgeOnlyHTML("Q","rtl") emits dir="rtl" on the badge div and
+			// the questions wrapper carries dir="rtl" + s-arab class (NFR-4).
+			name:  "script=arab: RTL badge and wrapper",
+			input: "{start-questions script=arab}\nما اسمك؟\n{end-questions}\n",
+			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">Q</span></div>\n" +
+				"<div class=\"questions s-arab\" dir=\"rtl\">\n" +
+				"<div class=\"questions-item\">\n" +
+				"<span class=\"questions-question\">ما اسمك؟</span>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
 			name:  "question + answer",
 			input: "{start-questions}\nWhere are you from? = Poland\n{end-questions}\n",
-			want: "<div class=\"questions\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">Q</span></div>\n" +
+				"<div class=\"questions\" dir=\"ltr\">\n" +
 				"<div class=\"questions-group\">\n" +
 				"<div class=\"questions-item paired\">\n" +
 				"<div class=\"questions-col1\">\n" +
@@ -53,7 +68,8 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 				"Q3 = A3\n" +
 				"Q4\n" +
 				"{end-questions}\n",
-			want: "<div class=\"questions\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">Q</span></div>\n" +
+				"<div class=\"questions\" dir=\"ltr\">\n" +
 				"<div class=\"questions-item\">\n" +
 				"<span class=\"questions-question\">Q1</span>\n" +
 				"</div>\n" +
@@ -83,7 +99,8 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 		{
 			name:  "answer containing '=' proves the FIRST ' = ' split, not the last",
 			input: "{start-questions}\nQ = A = B\n{end-questions}\n",
-			want: "<div class=\"questions\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">Q</span></div>\n" +
+				"<div class=\"questions\" dir=\"ltr\">\n" +
 				"<div class=\"questions-group\">\n" +
 				"<div class=\"questions-item paired\">\n" +
 				"<div class=\"questions-col1\">\n" +

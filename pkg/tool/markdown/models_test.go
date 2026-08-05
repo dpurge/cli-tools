@@ -27,16 +27,31 @@ func TestToHTML_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase only",
 			input: "{start-models}\n你好\n{end-models}\n",
-			want: "<div class=\"models\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
+				"<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-item\">\n" +
 				"<span class=\"models-phrase\">你好</span>\n" +
 				"</div>\n" +
 				"</div>\n",
 		},
 		{
+			// RTL integration golden: script=arab → blockDirection("arab")="rtl"
+			// → badgeOnlyHTML("M","rtl") emits dir="rtl" on the badge div and
+			// the models wrapper carries dir="rtl" + s-arab class (NFR-4).
+			name:  "script=arab: RTL badge and wrapper",
+			input: "{start-models script=arab}\nمرحبا\n{end-models}\n",
+			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">M</span></div>\n" +
+				"<div class=\"models s-arab\" dir=\"rtl\">\n" +
+				"<div class=\"models-item\">\n" +
+				"<span class=\"models-phrase\">مرحبا</span>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
 			name:  "phrase + transcription, no translation",
 			input: "{start-models}\nrun [rʌn]\n{end-models}\n",
-			want: "<div class=\"models\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
+				"<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-group\">\n" +
 				"<div class=\"models-item paired\">\n" +
 				"<div class=\"models-col1\">\n" +
@@ -52,7 +67,8 @@ func TestToHTML_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase + translation, no transcription",
 			input: "{start-models}\nrun = biec\n{end-models}\n",
-			want: "<div class=\"models\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
+				"<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-group\">\n" +
 				"<div class=\"models-item paired\">\n" +
 				"<div class=\"models-col1\">\n" +
@@ -68,7 +84,8 @@ func TestToHTML_Models_Golden(t *testing.T) {
 		{
 			name:  "phrase + transcription + translation: transcription stacked below phrase in col1",
 			input: "{start-models}\nrun [rʌn] = biec\n{end-models}\n",
-			want: "<div class=\"models\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
+				"<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-group\">\n" +
 				"<div class=\"models-item paired\">\n" +
 				"<div class=\"models-col1\">\n" +
@@ -90,7 +107,8 @@ func TestToHTML_Models_Golden(t *testing.T) {
 				"run [rʌn]\n" +
 				"run = biec\n" +
 				"{end-models}\n",
-			want: "<div class=\"models\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
+				"<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-item\">\n" +
 				"<span class=\"models-phrase\">你好</span>\n" +
 				"</div>\n" +
@@ -121,7 +139,8 @@ func TestToHTML_Models_Golden(t *testing.T) {
 				"再见\n" +
 				"walk = iść\n" +
 				"{end-models}\n",
-			want: "<div class=\"models\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
+				"<div class=\"models\" dir=\"ltr\">\n" +
 				"<div class=\"models-group\">\n" +
 				"<div class=\"models-item paired\">\n" +
 				"<div class=\"models-col1\">\n" +

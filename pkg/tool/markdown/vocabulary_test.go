@@ -20,7 +20,8 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 		{
 			name:  "full line: phrase, grammar, transcription, translation",
 			input: "{start-vocabulary}\n你好 {noun} [nǐ hǎo] = hello\n{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">V</span></div>\n" +
+				"<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">你好</span>\n" +
 				"<span class=\"vocabulary-grammar\" dir=\"ltr\">noun</span>\n" +
@@ -32,7 +33,8 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 		{
 			name:  "phrase only",
 			input: "{start-vocabulary}\n你好\n{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">V</span></div>\n" +
+				"<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">你好</span>\n" +
 				"</div>\n" +
@@ -41,7 +43,8 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 		{
 			name:  "phrase + translation",
 			input: "{start-vocabulary}\n谢谢 = thank you\n{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">V</span></div>\n" +
+				"<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">谢谢</span>\n" +
 				"<span class=\"vocabulary-translation\" dir=\"ltr\">thank you</span>\n" +
@@ -51,10 +54,25 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 		{
 			name:  "phrase + grammar",
 			input: "{start-vocabulary}\n早上好 {greeting}\n{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">V</span></div>\n" +
+				"<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">早上好</span>\n" +
 				"<span class=\"vocabulary-grammar\" dir=\"ltr\">greeting</span>\n" +
+				"</div>\n" +
+				"</div>\n",
+		},
+		{
+			// RTL integration golden: script=arab → blockDirection("arab")="rtl"
+			// → badgeOnlyHTML("V","rtl") emits dir="rtl" on the badge div and
+			// the vocabulary wrapper carries dir="rtl" + s-arab class (NFR-4).
+			name:  "script=arab: RTL badge and wrapper",
+			input: "{start-vocabulary lang=ar script=arab}\nمرحبا = hello\n{end-vocabulary}\n",
+			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">V</span></div>\n" +
+				"<div class=\"vocabulary s-arab\" dir=\"rtl\">\n" +
+				"<div class=\"vocabulary-item\">\n" +
+				"<span class=\"vocabulary-phrase\">مرحبا</span>\n" +
+				"<span class=\"vocabulary-translation\" dir=\"ltr\">hello</span>\n" +
 				"</div>\n" +
 				"</div>\n",
 		},
@@ -65,7 +83,8 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 				"再见\n" +
 				"谢谢 = thank you\n" +
 				"{end-vocabulary}\n",
-			want: "<div class=\"vocabulary\" dir=\"ltr\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">V</span></div>\n" +
+				"<div class=\"vocabulary\" dir=\"ltr\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">你好</span>\n" +
 				"<span class=\"vocabulary-grammar\" dir=\"ltr\">noun</span>\n" +

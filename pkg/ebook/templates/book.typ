@@ -31,13 +31,33 @@
 // bold/italic renders poorly, so strong/emph substitute a distinct role
 // font at normal weight/style instead (SPECS §8.4).
 #let _largeScripts = (
-  "hans", "hant", "hani", "arab", "hebr", "kore", "hang", "jpan", "hira", "kana",
+  "hans", "hant", "hani", "arab", "hebr", "kore", "hang", "jpan", "hira", "kana", "syrc",
 )
 // Defensively lowercase/trim before the set-membership check, matching the
 // Go-side `resolve`'s `strings.ToLower(strings.TrimSpace(...))` normalization
 // (SPECS §8.4 FIX-4/minor): a caller passing e.g. "Arab" (author-cased
 // script= attribute) must gate identically to "arab".
 #let _isLargeScript(script) = lower(script.trim()) in _largeScripts
+
+// SPECS F-SIZE: per-block complex-script enlargement. Rather than the book-
+// level uniform bump (book()'s `size` below, keyed on the BOOK script), each
+// block enlarges ONLY its own foreign-script run so a Latin-script book with
+// e.g. hans blocks (script:latn book, script=hans blocks) renders the Chinese
+// larger than the surrounding pinyin/translation. `_sizeFactor` is set in
+// book(): 1.0 when the book is already whole-book large-script (no double
+// enlargement / no regression), else size-large/size (≈1.33). Reads state, so
+// callers MUST be inside a `context` expression (mirrors _resolveFont, above).
+#let _sizeFactor = state("size-factor", 1.0)
+#let _foreignSize(script) = if _isLargeScript(script) { _sizeFactor.get() * 1em } else { 1em }
+
+// SPECS F-MARK: the content-type badge — a filled black square with a knockout
+// white letter (T/V/D/M/Q). The letter's font is PINNED to the header (Latin)
+// role so it never inherits a surrounding CJK/complex-script stack and turn
+// into a substitution box (reviewer H2); reading _roleFonts needs `context`.
+#let _ctbadge(letter) = context box(
+  width: 1.1em, height: 1.1em, fill: black, radius: 1pt, inset: 0pt, baseline: 0.2em,
+  align(center + horizon, text(font: _roleFonts.get().header, fill: white, weight: "bold", size: 0.72em, letter)),
+)
 
 // _slotKey joins the non-empty (script,ext,field,style) parts with a single
 // space — the SAME canonical key shape typst.go's slotKey produces, so a
@@ -188,7 +208,7 @@
   } else if role == "translation" {
     context text(font: _resolveFont(script: "", ext: "text", field: "translation"), body)
   } else {
-    context text(font: _resolveFont(script: script, ext: "text", field: "source"), body)
+    context text(font: _resolveFont(script: script, ext: "text", field: "source"), size: _foreignSize(script), body)
   }
 }
 
@@ -215,7 +235,7 @@
         // for textblock/dialog/parallel above, visually identical output to
         // Typst's native bold for the common (non-large-script book) case.
         if _isLargeScript(script) {
-          context text(font: _resolveFont(script: script, ext: "vocabulary", field: "phrase", style: "strong"), weight: "regular", it.at("phrase", default: ""))
+          context text(font: _resolveFont(script: script, ext: "vocabulary", field: "phrase", style: "strong"), weight: "regular", size: _foreignSize(script), it.at("phrase", default: ""))
         } else {
           text(weight: "bold", it.at("phrase", default: ""))
         }
@@ -248,7 +268,7 @@
       // `strong(...)` call — see vocabulary()'s matching comment above for
       // why (SPECS §8.4 fix pass, residual item).
       let phraseContent = if _isLargeScript(script) {
-        context text(font: _resolveFont(script: script, ext: "models", field: "phrase", style: "strong"), weight: "regular", phrase)
+        context text(font: _resolveFont(script: script, ext: "models", field: "phrase", style: "strong"), weight: "regular", size: _foreignSize(script), phrase)
       } else {
         text(weight: "bold", phrase)
       }
@@ -291,15 +311,15 @@
     let answer = it.at("answer", default: "")
     if answer != "" {
       run += (
-        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), question),
-        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "answer", as-translation: asTranslation), answer),
+        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: _foreignSize(familyScript), question),
+        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "answer", as-translation: asTranslation), size: _foreignSize(familyScript), answer),
       )
     } else {
       if run.len() > 0 {
         grid(columns: (auto, 1fr), column-gutter: 1em, row-gutter: 0.5em, align: (start + top, start + top), ..run)
         run = ()
       }
-      context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), question)
+      context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: _foreignSize(familyScript), question)
       parbreak()
     }
   }
@@ -342,11 +362,11 @@
     columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
     ..turns.pos().map(t => (
       if _isLargeScript(familyScript) {
-        context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "header", style: "strong", as-translation: asTranslation), weight: "regular", t.at("header", default: ""))
+        context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "header", style: "strong", as-translation: asTranslation), weight: "regular", size: _foreignSize(familyScript), t.at("header", default: ""))
       } else {
         text(weight: "bold", t.at("header", default: ""))
       },
-      context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", as-translation: asTranslation))[#t.at("content", default: [])],
+      context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", as-translation: asTranslation), size: _foreignSize(familyScript))[#t.at("content", default: [])],
     )).flatten()
   ))
 }
@@ -434,6 +454,9 @@
   _sourceDir.update(dir)
   _fontSlots.update(font-slots)
   _bookScript.update(book-script)
+  // 1.0 keeps a whole-book large-script book unchanged (its base is already
+  // size-large); otherwise foreign runs scale by size-large/size (SPECS FR-2).
+  _sizeFactor.update(if large-script { 1.0 } else { size-large / size })
 
   set document(title: title, author: if author == none or author == "" { () } else { author })
   set text(

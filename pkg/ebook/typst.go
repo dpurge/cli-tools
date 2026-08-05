@@ -601,6 +601,7 @@ var largeScriptCodes = map[string]bool{
 	"jpan": true, // Japanese (Han + Kana)
 	"hira": true, // Hiragana
 	"kana": true, // Katakana
+	"syrc": true, // Syriac
 }
 
 // largeScript reports whether an ISO 15924 script code selects book.typ's
