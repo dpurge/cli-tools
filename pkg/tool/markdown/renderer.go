@@ -1,6 +1,7 @@
 package markdown
 
 import (
+	"fmt"
 	"io"
 
 	gast "github.com/yuin/goldmark/ast"
@@ -64,6 +65,12 @@ func renderVocabulary(w util.BufWriter, source []byte, node gast.Node, entering 
 	io.WriteString(w, dir)
 	io.WriteString(w, "\">\n")
 	for _, item := range n.Items {
+		// ItemHeader: emit <hN> with no id (ASR-6) and raw text (ASR-4).
+		if item.Kind == ItemHeader {
+			fmt.Fprintf(w, "<h%d>%s</h%d>\n", item.Level, item.Text, item.Level)
+			continue
+		}
+		// ItemData: existing vocabulary-item emission (no notes in vocabulary, D1).
 		io.WriteString(w, "<div class=\"vocabulary-item\">\n")
 		if item.Phrase != "" {
 			io.WriteString(w, "<span class=\"vocabulary-phrase\">")
@@ -115,6 +122,19 @@ func renderDialog(w util.BufWriter, source []byte, node gast.Node, entering bool
 	io.WriteString(w, dir)
 	io.WriteString(w, "\">\n")
 	for _, item := range n.Items {
+		// ItemHeader: raw <hN>, no id (ASR-6/ASR-4).
+		if item.Kind == ItemHeader {
+			fmt.Fprintf(w, "<h%d>%s</h%d>\n", item.Level, item.Text, item.Level)
+			continue
+		}
+		// ItemNote: centered block-note paragraph (SPECS §6).
+		if item.Kind == ItemNote {
+			io.WriteString(w, "<p class=\"block-note\">")
+			io.WriteString(w, item.Text)
+			io.WriteString(w, "</p>\n")
+			continue
+		}
+		// ItemData: existing dialog-item emission.
 		content, err := ToHTML([]byte(item.Content))
 		if err != nil {
 			return gast.WalkStop, err
@@ -130,7 +150,16 @@ func renderDialog(w util.BufWriter, source []byte, node gast.Node, entering bool
 	return gast.WalkContinue, nil
 }
 
-// renderParallel emits the byte-identical `<div class="parallel">` wrapper.
+// renderParallel emits the `<div class="parallel">` wrapper (SPECS §6).
+// Per row:
+//   - .parallel-cell.main always contains a .parallel-source inner wrapper
+//     carrying dir="<blockDirection(n.Script)>" (source direction, from marker).
+//     When TranscriptionRaw is non-empty, a .parallel-transcription wrapper
+//     follows inside .main, with dir="ltr" pinned (matches vocabulary/models,
+//     ASR-6/D5). The .main cell carries NO dir itself (ASR-8: the transcription
+//     must not inherit the source's marker direction).
+//   - .parallel-cell.secondary is emitted only when TranslationRaw is non-empty,
+//     and carries NO dir attribute (translation inherits book direction, ASR-1).
 func renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
 	if !entering {
 		return gast.WalkContinue, nil
@@ -145,26 +174,40 @@ func renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bo
 	io.WriteString(w, "\">\n")
 	for _, row := range n.Rows {
 		io.WriteString(w, "<div class=\"parallel-row\">\n")
-		if row.MainRaw != "" {
-			content, err := ToHTML([]byte(row.MainRaw))
+
+		// Primary column: source always; transcription stacked below when present.
+		sourceContent, err := ToHTML([]byte(row.SourceRaw))
+		if err != nil {
+			return gast.WalkStop, err
+		}
+		io.WriteString(w, "<div class=\"parallel-cell main\">\n")
+		io.WriteString(w, "<div class=\"parallel-source\" dir=\"")
+		io.WriteString(w, blockDirection(n.Script))
+		io.WriteString(w, "\">\n")
+		w.Write(sourceContent)
+		io.WriteString(w, "\n</div>\n")
+		if row.TranscriptionRaw != "" {
+			transcriptionContent, err := ToHTML([]byte(row.TranscriptionRaw))
 			if err != nil {
 				return gast.WalkStop, err
 			}
-			io.WriteString(w, "<div class=\"parallel-cell main\">\n")
-			w.Write(content)
+			io.WriteString(w, "<div class=\"parallel-transcription\" dir=\"ltr\">\n")
+			w.Write(transcriptionContent)
 			io.WriteString(w, "\n</div>\n")
 		}
-		if row.SecondaryRaw != "" {
-			content, err := ToHTML([]byte(row.SecondaryRaw))
+		io.WriteString(w, "</div>\n")
+
+		// Secondary column: translation only when present; NO dir attribute (ASR-1).
+		if row.TranslationRaw != "" {
+			translationContent, err := ToHTML([]byte(row.TranslationRaw))
 			if err != nil {
 				return gast.WalkStop, err
 			}
-			io.WriteString(w, "<div class=\"parallel-cell secondary\" dir=\"")
-			io.WriteString(w, blockDirection(n.Script))
-			io.WriteString(w, "\">\n")
-			w.Write(content)
+			io.WriteString(w, "<div class=\"parallel-cell secondary\">\n")
+			w.Write(translationContent)
 			io.WriteString(w, "\n</div>\n")
 		}
+
 		io.WriteString(w, "</div>\n")
 	}
 	io.WriteString(w, "</div>\n")
@@ -210,6 +253,23 @@ func renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool
 	io.WriteString(w, "\">\n")
 	inGroup := false
 	for _, item := range n.Items {
+		// ItemHeader/ItemNote: flush any open models-group, then emit at full
+		// block width outside the two-column group (SPECS §6 group-flush).
+		if item.Kind == ItemHeader || item.Kind == ItemNote {
+			if inGroup {
+				io.WriteString(w, "</div>\n")
+				inGroup = false
+			}
+			if item.Kind == ItemHeader {
+				fmt.Fprintf(w, "<h%d>%s</h%d>\n", item.Level, item.Text, item.Level)
+			} else {
+				io.WriteString(w, "<p class=\"block-note\">")
+				io.WriteString(w, item.Text)
+				io.WriteString(w, "</p>\n")
+			}
+			continue
+		}
+		// ItemData: existing models-item emission.
 		if item.Transcription == "" && item.Translation == "" {
 			if inGroup {
 				io.WriteString(w, "</div>\n")
@@ -293,6 +353,23 @@ func renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering b
 	io.WriteString(w, "\">\n")
 	inGroup := false
 	for _, item := range n.Items {
+		// ItemHeader/ItemNote: flush any open questions-group, then emit at full
+		// block width outside the two-column group (SPECS §6 group-flush).
+		if item.Kind == ItemHeader || item.Kind == ItemNote {
+			if inGroup {
+				io.WriteString(w, "</div>\n")
+				inGroup = false
+			}
+			if item.Kind == ItemHeader {
+				fmt.Fprintf(w, "<h%d>%s</h%d>\n", item.Level, item.Text, item.Level)
+			} else {
+				io.WriteString(w, "<p class=\"block-note\">")
+				io.WriteString(w, item.Text)
+				io.WriteString(w, "</p>\n")
+			}
+			continue
+		}
+		// ItemData: existing questions-item emission.
 		if item.Answer == "" {
 			if inGroup {
 				io.WriteString(w, "</div>\n")

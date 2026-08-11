@@ -153,6 +153,12 @@ func parseVocabularyItems(inner string) []VocabularyItem {
 			continue
 		}
 
+		// Header recognition (SPECS §3.1/§5); no note support for vocabulary (D1).
+		if level, text, ok := isBlockHeader(s); ok {
+			items = append(items, VocabularyItem{BlockAnnotation: BlockAnnotation{Kind: ItemHeader, Level: level, Text: text}})
+			continue
+		}
+
 		var item VocabularyItem
 
 		if i := strings.LastIndex(s, "="); i != -1 {
@@ -263,6 +269,25 @@ func parseDialogItems(inner string) ([]DialogItem, error) {
 	for _, line := range strings.Split(inner, "\n") {
 		s := strings.TrimRight(line, " *")
 
+		// Block-level header/note recognition on un-indented lines (SPECS §3.3/§5).
+		// Indented lines (starting with spaces) are preserved as turn content by
+		// the existing " " prefix check below — isBlockHeader/isBlockNote never
+		// match them because they require a leading '#' or '(' with no indent.
+		// flush() the current turn buffer and reset header="" to prevent a stale
+		// speaker label from producing a spurious empty DialogItem (SPECS §5 F6).
+		if level, text, ok := isBlockHeader(s); ok {
+			flush()
+			items = append(items, DialogItem{BlockAnnotation: BlockAnnotation{Kind: ItemHeader, Level: level, Text: text}})
+			header = ""
+			continue
+		}
+		if text, ok := isBlockNote(s); ok {
+			flush()
+			items = append(items, DialogItem{BlockAnnotation: BlockAnnotation{Kind: ItemNote, Text: text}})
+			header = ""
+			continue
+		}
+
 		if isDialogItemHeader(s) {
 			flush()
 			header = getDialogItemHeader(s)
@@ -317,6 +342,43 @@ func getDialogItemHeader(header string) string {
 	return res
 }
 
+// isBlockHeader reports whether line is a CommonMark ATX heading (1–6 '#'
+// characters followed by a space/tab or end-of-string). Returns the heading
+// level (1-6), trimmed text, and ok=true. Seven or more '#' → ok=false.
+// Operates on the already-scope-trimmed line (per-block trimming rules,
+// SPECS §3.1/§3.3).
+func isBlockHeader(line string) (level int, text string, ok bool) {
+	if len(line) == 0 || line[0] != '#' {
+		return 0, "", false
+	}
+	i := 0
+	for i < len(line) && line[i] == '#' {
+		i++
+	}
+	if i > 6 {
+		return 0, "", false
+	}
+	level = i
+	if i == len(line) {
+		// Bare "####" with no trailing text is a valid header with empty text.
+		return level, "", true
+	}
+	if line[i] != ' ' && line[i] != '\t' {
+		return 0, "", false
+	}
+	return level, strings.TrimSpace(line[i+1:]), true
+}
+
+// isBlockNote reports whether line is a parenthesized note: the entire line
+// starts with '(' and ends with ')' (length ≥ 2). Returns the inner text
+// (parentheses stripped, TrimSpaced) and ok=true (SPECS §3.2).
+func isBlockNote(line string) (text string, ok bool) {
+	if len(line) < 2 || line[0] != '(' || line[len(line)-1] != ')' {
+		return "", false
+	}
+	return strings.TrimSpace(line[1 : len(line)-1]), true
+}
+
 // ---------------------------------------------------------------------
 // Parallel
 // ---------------------------------------------------------------------
@@ -361,10 +423,17 @@ func (b *parallelParser) CanInterruptParagraph() bool { return true }
 func (b *parallelParser) CanAcceptIndentedLine() bool { return false }
 
 // parseParallelRows parses the dedented `{start-parallel}` body into rows.
-// Rows are separated by a "===" line; within a row, an optional secondary
-// cell is split off at the LAST "---" line (`strings.LastIndex`, not the
-// first), so a `---` thematic break inside the main cell's own markdown is
-// preserved.
+// Rows are separated by a "===" line; within each row the record is split on
+// every lone "---" line, capped at 3 fields (strings.SplitN(..., 3)):
+//   - field 1 (SourceRaw): always present.
+//   - field 2 (TranslationRaw): present when the record has ≥2 "---"-separated fields.
+//   - field 3 (TranscriptionRaw): present when the record has exactly 3 "---"-separated fields.
+//
+// A record with 4+ "---" lines absorbs the excess into field 3 (the extra
+// separators remain verbatim inside TranscriptionRaw). This retires the
+// prior strings.LastIndex thematic-break-preservation trick: a "---" inside
+// the source of a 2-field record now splits source from translation (ASR-3,
+// SPECS §5.2).
 //
 // D2: unlike the original gomarkdown port, this design never slices the
 // block by a marker's byte length (the block parser's Open/Continue consume
@@ -380,12 +449,15 @@ func parseParallelRows(inner string) []ParallelRow {
 			continue
 		}
 
+		fields := strings.SplitN(s, "\n---\n", 3)
 		var row ParallelRow
-		if i := strings.LastIndex(s, "\n---\n"); i != -1 {
-			row.SecondaryRaw = strings.TrimSpace(s[i+len("\n---\n"):])
-			s = strings.TrimSpace(s[:i])
+		row.SourceRaw = strings.TrimSpace(fields[0])
+		if len(fields) >= 2 {
+			row.TranslationRaw = strings.TrimSpace(fields[1])
 		}
-		row.MainRaw = s
+		if len(fields) == 3 {
+			row.TranscriptionRaw = strings.TrimSpace(fields[2])
+		}
 
 		rows = append(rows, row)
 	}
@@ -455,6 +527,16 @@ func parseModelsItems(inner string) []ModelsItem {
 	for _, line := range strings.Split(inner, "\n") {
 		s := strings.TrimSpace(line)
 		if s == "" {
+			continue
+		}
+
+		// Header then note recognition (SPECS §3.1/§3.2/§5).
+		if level, text, ok := isBlockHeader(s); ok {
+			items = append(items, ModelsItem{BlockAnnotation: BlockAnnotation{Kind: ItemHeader, Level: level, Text: text}})
+			continue
+		}
+		if text, ok := isBlockNote(s); ok {
+			items = append(items, ModelsItem{BlockAnnotation: BlockAnnotation{Kind: ItemNote, Text: text}})
 			continue
 		}
 
@@ -589,6 +671,16 @@ func parseQuestionsItems(inner string) []QuestionItem {
 	for _, line := range strings.Split(inner, "\n") {
 		s := strings.TrimSpace(line)
 		if s == "" {
+			continue
+		}
+
+		// Header then note recognition (SPECS §3.1/§3.2/§5).
+		if level, text, ok := isBlockHeader(s); ok {
+			items = append(items, QuestionItem{BlockAnnotation: BlockAnnotation{Kind: ItemHeader, Level: level, Text: text}})
+			continue
+		}
+		if text, ok := isBlockNote(s); ok {
+			items = append(items, QuestionItem{BlockAnnotation: BlockAnnotation{Kind: ItemNote, Text: text}})
 			continue
 		}
 

@@ -91,6 +91,8 @@ Headings (`h1`–`h3`) inside any text block are centered, and markdown tables s
 
 **Block set**: `{start-vocabulary}`, `{start-models}`, `{start-questions}`, `{start-dialog}`, `{start-parallel}`, and `{start-text}`. **`as=` roles** are unified across the blocks that carry a source/translation distinction: `{start-text}` takes `as=source|transcription|translation|grammar`; `{start-dialog}` and `{start-questions}` take `as=source|translation` (an `as=translation` block is in the reader's own language — comprehension questions, a translated dialog — and uses the Translation font); `{start-vocabulary}`, `{start-models}`, and `{start-parallel}` reject `as=` because their field languages are fixed. Validation: an unrecognized `script` value falls back to LTR (no error); an **unknown attribute key**, a **malformed attribute** (missing `=` or unterminated quote), or an **`as=` value not accepted by that block** fails the build with a message naming the offending marker.
 
+**Headers and notes**: `vocabulary`, `models`, `questions`, and `dialog` blocks accept a line starting with `#` through `######` anywhere inside them as a heading (renders as `h1`–`h6`), interleaved in place among the block's data lines — it's a visual heading local to the block, not a table-of-contents entry. `dialog`, `questions`, and `models` (not `vocabulary`) additionally accept a note — a sentence or phrase alone on a line inside `(...)` — rendered as a centered paragraph (see **Notes** under [Font configuration](#font-configuration-fontcss)). Vocabulary export to CSV skips header lines entirely (no row emitted); phraseforge/MDX export keeps them as literal text.
+
 **`contents-title` project key**: set in `ebook.yml` to override the PDF outline title (default "Contents"):
 
 ```yml
@@ -146,21 +148,27 @@ A question-only line renders as a normal paragraph (body font). Consecutive ques
 
 #### `{start-parallel}` ... `{end-parallel}`
 
-Two-column parallel text (e.g. original + translation side-by-side). Rows are separated by a lone `===` line; within a row the **last** lone `---` line splits the main cell from the secondary cell. A row may omit the secondary cell. `as=` is not accepted.
+Two-column parallel text (e.g. source + translation side-by-side). Rows are separated by a lone `===` line; within a row, every lone `---` line splits the record into up to **three** fields — **source**, **translation**, **transcription** (the last two optional). `as=` is not accepted.
 
 ```
-{start-parallel lang=pol script=latn}
-Pierwsze zdanie.
+{start-parallel lang=lat script=latn}
+Et rex David senuerat habebatque aetatis plurimos dies.
 ---
-First sentence.
+Now king David was old, and advanced in years.
 ===
-Drugie zdanie.
+Dixerunt ergo ei servi sui.
 ---
-Second sentence.
+His servants therefore, said to him.
+---
+Dixerunt ergo ei servi sui.
 {end-parallel}
 ```
 
-**Column rule**: the **primary (main) column** inherits the book's language, script, direction, and body font — it has no marker-derived override. The `lang=`/`script=` attributes on the marker set the **secondary column** only: its text direction (`arab`/`hebr`/`syrc` → RTL, all others → LTR) and the translation font role. Column order follows the book's reading direction (RTL book → main on the right, secondary on the left; LTR book → main on the left).
+The second row above shows the optional third field (transcription).
+
+> **Behavior change:** this reverses the column rule from earlier releases (primary column used to inherit the book's language with no marker override; the marker's `lang=`/`script=` used to drive the *secondary* column only). The rule below is the current, correct one.
+
+**Column rule**: the **primary column is the source** — its text direction, font, and (for large scripts) size all come from the marker's `lang=`/`script=` attributes (falling back to the book's own language/script when the marker omits them, same as every other block). If present, the **transcription** stacks directly below the source, inside the same primary column — always rendered as a Latin-script, left-to-right romanization (matching `{start-vocabulary}`'s transcription field), regardless of the marker's or book's own script. The **secondary column is the translation** — always in the book's own language, script, and font, with no marker override. Column *position* (left/right) still follows the **book's** reading direction (RTL book → primary on the right, LTR book → primary on the left); only each column's internal direction/font follows the rule above.
 
 #### EPUB stylesheets
 
@@ -247,6 +255,8 @@ Declare only the slots you want to override — undeclared names are skipped. A 
 **How each output applies it.** On EPUB each qualified name becomes a `font-family` fallback list on the field's CSS selector. Fields that follow the block's own script are scoped by an `s-<script>` class the renderer puts on the block wrapper (`<div class="questions s-arab">`), so one book can mix scripts; fields whose language is fixed regardless of the block — transcription (romanization → `latn`) and translation / grammar (the base language) — are matched unscoped. The PDF resolver reproduces the same order from the same `font.css`. Which base role a block's main text plays follows its `as=` role (`source`→Body, `translation`→Translation, `transcription`→Transcription); a `dialog`/`questions` block marked `as=translation` also emits an `as-translation` class so EPUB matches the PDF.
 
 **Strong / Emphasis.** For large scripts (Arabic, Hebrew, CJK, Korean, Japanese) synthetic bold/italic renders poorly, so bold (`**…**` / `<strong>`/`<b>`) and italic (`*…*` / `<em>`/`<i>`) switch to the resolved `Strong`/`Emphasis` slot at *normal* weight/style; Latin and other scripts keep real bold/italic. The switch is decided **per field, by that field's resolved script** — so a Latin translation inside an Arabic block still gets ordinary Latin bold, not an Arabic strong face. Declare `Font <Script> Strong`/`Emphasis` (or plain `Font Strong`/`Font Emphasis`) to choose the substitute; when undeclared, bold/italic simply falls back to the regular resolved font.
+
+**Notes.** A comment/note line — a sentence or phrase alone on a line, wrapped in `(...)` — inside a `dialog`, `questions`, or `models` block (not `vocabulary`) renders as a centered paragraph in the `Notes` role. Declare `Font Notes` to choose its font; when undeclared, notes fall back to the `Emphasis` font.
 
 The ready-made bundles under `epub-public`'s `src/css/main/{arab,hebr,latn}/` show the full pattern — a `font.css` palette plus the per-component CSS chains that spell out these fallback lists.
 

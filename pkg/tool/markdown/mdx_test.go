@@ -562,11 +562,11 @@ func TestToMDX_Dialog_Err(t *testing.T) {
 	}
 }
 
-// TestToMDX_Parallel_Golden covers the parallel fence (SPECS §4.4, a NEW
-// format): multiple rows joined by "===", a row's own inner "---" (in
-// MainRaw) preserved because the split is on the LAST "\n---\n" within a
-// row (mirrors parser.go's parseParallelRows), and a row with an empty
-// secondary cell (no "---" is emitted at all for it, not an empty one).
+// TestToMDX_Parallel_Golden covers the parallel fence with the NEW field semantics
+// (ASR-1/ASR-3): every "---" is now a field separator (SplitN cap 3), so the
+// fence body reconstructs each row's fields joined by "\n---\n" without any
+// surrounding blank lines (TrimSpace is applied per field during parsing).
+// Row 2 (source-only) emits no "---" separator at all.
 func TestToMDX_Parallel_Golden(t *testing.T) {
 	runMdxGolden(t, []struct {
 		name  string
@@ -574,7 +574,10 @@ func TestToMDX_Parallel_Golden(t *testing.T) {
 		want  string
 	}{
 		{
-			name: "LAST '---' split in main cell, plus a row with empty secondary",
+			// Was: "LAST '---' split in main cell, plus a row with empty secondary"
+			// Now (ASR-3): two "---" lines → 3 fields (source/translation/transcription),
+			// each TrimSpace'd and rejoined with "\n---\n". Row 2 source-only → no "---".
+			name: "three-field row then source-only row (ASR-3 new split behavior)",
 			input: "{start-parallel}\n" +
 				"First para.\n" +
 				"\n" +
@@ -587,7 +590,9 @@ func TestToMDX_Parallel_Golden(t *testing.T) {
 				"Row2 main only.\n" +
 				"{end-parallel}\n",
 			want: "```parallel lang=lat script=latn\n" +
-				"First para.\n\n---\n\nSecond para in main.\n" +
+				"First para.\n" +
+				"---\n" +
+				"Second para in main.\n" +
 				"---\n" +
 				"Secondary cell.\n" +
 				"===\n" +
@@ -595,6 +600,111 @@ func TestToMDX_Parallel_Golden(t *testing.T) {
 				"```\n",
 		},
 	})
+}
+
+// ---------------------------------------------------------------------
+// SPECS §12.5 — MDX round-trip (parallel-specific)
+// ---------------------------------------------------------------------
+
+// TestToMDX_Parallel_OneField verifies that a source-only row round-trips as
+// its source text with no "---" separator in the fence body.
+func TestToMDX_Parallel_OneField(t *testing.T) {
+	runMdxGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "source only, no --- in fence body",
+			input: "{start-parallel}\nsource text\n{end-parallel}\n",
+			want:  "```parallel lang=lat script=latn\nsource text\n```\n",
+		},
+	})
+}
+
+// TestToMDX_Parallel_TwoFields verifies that a two-field row (source + translation)
+// round-trips with a single "\n---\n" joining the two fields.
+func TestToMDX_Parallel_TwoFields(t *testing.T) {
+	runMdxGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "source and translation joined by ---",
+			input: "{start-parallel}\nsource\n---\ntranslation\n{end-parallel}\n",
+			want:  "```parallel lang=lat script=latn\nsource\n---\ntranslation\n```\n",
+		},
+	})
+}
+
+// TestToMDX_Parallel_ThreeFields verifies that a three-field row (source +
+// translation + transcription) round-trips with two "\n---\n" separators.
+func TestToMDX_Parallel_ThreeFields(t *testing.T) {
+	runMdxGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "source, translation, and transcription joined by --- ---",
+			input: "{start-parallel}\nsource\n---\ntranslation\n---\ntranscription\n{end-parallel}\n",
+			want:  "```parallel lang=lat script=latn\nsource\n---\ntranslation\n---\ntranscription\n```\n",
+		},
+	})
+}
+
+// TestToMDX_Parallel_RoundTripStable proves parse → ToMDX → parse is lossless
+// for all three field counts: the re-parsed fence body produces HTML identical to
+// the original input's HTML, confirming the same ParallelRow fields are recovered
+// (SPECS §12.5). Verified via public API only (ToMDX + ToHTML).
+func TestToMDX_Parallel_RoundTripStable(t *testing.T) {
+	// Step-by-step scenario: for each field count, verify that serializing to MDX
+	// and re-parsing the fence body produces identical ParallelRows (evidenced by
+	// byte-identical HTML output). Mirrors TestToMDX_ModelsRoundTrip pattern.
+	cases := []struct {
+		name  string
+		input string
+	}{
+		{
+			name:  "one field",
+			input: "{start-parallel}\nSource text.\n{end-parallel}\n",
+		},
+		{
+			name:  "two fields",
+			input: "{start-parallel}\nSource text.\n---\nTranslation text.\n{end-parallel}\n",
+		},
+		{
+			name:  "three fields",
+			input: "{start-parallel}\nSource text.\n---\nTranslation text.\n---\nTranscription text.\n{end-parallel}\n",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Pass 1: original input → MDX fence.
+			gotMDX, err := markdown.ToMDX([]byte(tc.input), "lat", "latn")
+			if err != nil {
+				t.Fatalf("ToMDX() unexpected error: %v", err)
+			}
+			// Extract the fence body between the opening and closing backtick lines.
+			body := strings.TrimPrefix(string(gotMDX), "```parallel lang=lat script=latn\n")
+			body = strings.TrimSuffix(body, "\n```\n")
+
+			// Pass 2: re-wrap the body and compare HTML output.
+			originalHTML, err := markdown.ToHTML([]byte(tc.input))
+			if err != nil {
+				t.Fatalf("original ToHTML() unexpected error: %v", err)
+			}
+			reparsedHTML, err := markdown.ToHTML([]byte("{start-parallel}\n" + body + "\n{end-parallel}\n"))
+			if err != nil {
+				t.Fatalf("reparsed ToHTML() unexpected error: %v", err)
+			}
+			if string(reparsedHTML) != string(originalHTML) {
+				t.Fatalf("round-trip mismatch for %q:\n got:  %q\nwant: %q",
+					tc.name, string(reparsedHTML), string(originalHTML))
+			}
+		})
+	}
 }
 
 // TestToMDX_Models_Golden covers the models fence (mirrors
@@ -1113,5 +1223,151 @@ func TestToMDX_QuestionsRoundTrip(t *testing.T) {
 				t.Fatalf("round-trip mismatch for %q:\n got  %q\n want %q", line, string(reparsedHTML), string(originalHTML))
 			}
 		})
+	}
+}
+
+// ---------------------------------------------------------------------
+// SPECS §12.5 — MDX round-trip non-regression
+// ---------------------------------------------------------------------
+
+// TestMDXVocabularyHeaderRoundTrip asserts:
+//  1. The EXACT serialized fence-line string for a vocabulary header item —
+//     specifically that no trailing " = " separator is appended (F7 / SPECS §10).
+//  2. parse→ToMDX→parse is lossless: re-parsing the fence body produces the
+//     same HTML as the original input.
+func TestMDXVocabularyHeaderRoundTrip(t *testing.T) {
+	input := "{start-vocabulary}\nphrase1 = t1\n## Heading\nphrase2 = t2\n{end-vocabulary}\n"
+
+	got, err := markdown.ToMDX([]byte(input), "lat", "latn")
+	if err != nil {
+		t.Fatalf("ToMDX() unexpected error: %v", err)
+	}
+
+	// (1) Exact serialized string: the header must appear as "## Heading" with
+	// no trailing " = " or other data-item suffix.
+	want := "```vocabulary lang=lat script=latn\n" +
+		"phrase1 = t1\n" +
+		"## Heading\n" +
+		"phrase2 = t2\n" +
+		"```\n"
+	if string(got) != want {
+		t.Fatalf("ToMDX() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+
+	// (2) parse→ToMDX→parse losslessness: extract the fence body, re-wrap,
+	// convert to HTML, and compare to the original's HTML.
+	body := strings.TrimPrefix(string(got), "```vocabulary lang=lat script=latn\n")
+	body = strings.TrimSuffix(body, "\n```\n")
+
+	originalHTML, err := markdown.ToHTML([]byte(input))
+	if err != nil {
+		t.Fatalf("ToHTML() unexpected error: %v", err)
+	}
+	reparsedHTML, err := markdown.ToHTML([]byte("{start-vocabulary}\n" + body + "\n{end-vocabulary}\n"))
+	if err != nil {
+		t.Fatalf("ToHTML() round-trip unexpected error: %v", err)
+	}
+	if string(reparsedHTML) != string(originalHTML) {
+		t.Fatalf("round-trip HTML mismatch\n got: %q\nwant: %q", string(reparsedHTML), string(originalHTML))
+	}
+}
+
+// TestMDXDialogNoteRoundTrip asserts:
+//  1. The EXACT serialized fence-line string for a dialog note item — the
+//     parentheses that were stripped during parsing are re-added (D5 / SPECS §10).
+//  2. parse→ToMDX→parse is lossless.
+func TestMDXDialogNoteRoundTrip(t *testing.T) {
+	input := "{start-dialog}\n--:\n  Hello there.\n(A greeting)\n{end-dialog}\n"
+
+	got, err := markdown.ToMDX([]byte(input), "lat", "latn")
+	if err != nil {
+		t.Fatalf("ToMDX() unexpected error: %v", err)
+	}
+
+	// (1) Exact serialized string: the note appears as "(A greeting)" with
+	// parens restored, at block level (un-indented), distinct from turn content.
+	want := "```dialog lang=lat script=latn\n" +
+		"--:\n" +
+		"  Hello there.\n" +
+		"(A greeting)\n" +
+		"```\n"
+	if string(got) != want {
+		t.Fatalf("ToMDX() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+
+	// (2) parse→ToMDX→parse losslessness via HTML comparison.
+	body := strings.TrimPrefix(string(got), "```dialog lang=lat script=latn\n")
+	body = strings.TrimSuffix(body, "\n```\n")
+
+	originalHTML, err := markdown.ToHTML([]byte(input))
+	if err != nil {
+		t.Fatalf("ToHTML() unexpected error: %v", err)
+	}
+	reparsedHTML, err := markdown.ToHTML([]byte("{start-dialog}\n" + body + "\n{end-dialog}\n"))
+	if err != nil {
+		t.Fatalf("ToHTML() round-trip unexpected error: %v", err)
+	}
+	if string(reparsedHTML) != string(originalHTML) {
+		t.Fatalf("round-trip HTML mismatch\n got: %q\nwant: %q", string(reparsedHTML), string(originalHTML))
+	}
+}
+
+// TestMDXDataOnlyUnchanged is the ASR-3 byte-identical regression control for
+// the MDX renderer: a vocabulary block with no header/note lines must produce
+// MDX fence output that is byte-identical to the pre-change golden (SPECS §12.5,
+// ASR-3).
+func TestMDXDataOnlyUnchanged(t *testing.T) {
+	input := "{start-vocabulary}\np = t\n{end-vocabulary}\n"
+	want := "```vocabulary lang=lat script=latn\np = t\n```\n"
+	got, err := markdown.ToMDX([]byte(input), "lat", "latn")
+	if err != nil {
+		t.Fatalf("ToMDX() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToMDX() mismatch (ASR-3 regression)\n got: %q\nwant: %q", string(got), want)
+	}
+}
+
+// ---------------------------------------------------------------------
+// Phase-6 review recommendations R1 and R2
+// ---------------------------------------------------------------------
+
+// TestMDXHeaderEmptyTextTrailingSpace is the R1 explicit test case: a
+// vocabulary header with empty text (e.g. "#### " — bare hashes + a single
+// space) must be re-serialized with the trailing space preserved in the fence
+// body (the serializer emits strings.Repeat("#", Level) + " " + Text where
+// Text is ""), so the fence body line is "#### " not "####". This ensures
+// parse→ToMDX round-trip is lossless for empty-text headers.
+func TestMDXHeaderEmptyTextTrailingSpace(t *testing.T) {
+	// "#### " is TrimSpace'd to "####" by the vocabulary parser, then
+	// isBlockHeader("####") → level=4, text="", ok=true.
+	// The MDX serializer emits: "####" + " " + "" = "#### " (with trailing space).
+	input := "{start-vocabulary}\n#### \n{end-vocabulary}\n"
+	want := "```vocabulary lang=lat script=latn\n#### \n```\n"
+	got, err := markdown.ToMDX([]byte(input), "lat", "latn")
+	if err != nil {
+		t.Fatalf("ToMDX() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToMDX() mismatch (R1: empty-text header trailing space)\n got: %q\nwant: %q", string(got), want)
+	}
+}
+
+// TestMDXNotePaddedWhitespaceStripped is the R2 explicit test case: a models
+// note with padded inner whitespace — e.g. "( padded note )" — must be
+// re-serialized as "(padded note)" (inner text is TrimSpace'd by isBlockNote
+// per SPECS §3.2/D5), NOT as "( padded note )". The fence body must contain
+// the trimmed form.
+func TestMDXNotePaddedWhitespaceStripped(t *testing.T) {
+	// isBlockNote("( padded note )") → inner = " padded note ", TrimSpace → "padded note".
+	// MDX serializer: "(" + "padded note" + ")" = "(padded note)".
+	input := "{start-models}\n( padded note )\n{end-models}\n"
+	want := "```models lang=lat script=latn\n(padded note)\n```\n"
+	got, err := markdown.ToMDX([]byte(input), "lat", "latn")
+	if err != nil {
+		t.Fatalf("ToMDX() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToMDX() mismatch (R2: padded note whitespace stripped)\n got: %q\nwant: %q", string(got), want)
 	}
 }

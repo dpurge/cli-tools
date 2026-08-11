@@ -431,3 +431,79 @@ func TestClassifyFontFamily(t *testing.T) {
 		})
 	}
 }
+
+// --- §12.6 Notes font role (SPECS §8.1 / PLAN S7) -------------------------
+
+// TestNotesRoleUndeclaredFallsBackToEmph verifies ASR-5: when font.css does
+// not declare "Font Notes", roleFontPrefix("", "notes") returns an empty
+// stack so the assembleTypstDocument emit loop (len(stack) > 0) does NOT
+// write a font-notes: arg. book.typ then defaults notes → emphFont via
+// _roleFonts.update, not via a Go-side recommended family.
+//
+// Pre-condition: "notes" must be absent from recommendedRoleFont — if it
+// were present, roleFontPrefix would always return a non-empty stack even
+// when the author omits "Font Notes" from font.css, silently overriding
+// book.typ's emph-fallback with an unintended font.
+func TestNotesRoleUndeclaredFallsBackToEmph(t *testing.T) {
+	// Hard pre-condition: notes must not be in the recommended map (ASR-5).
+	if _, ok := recommendedRoleFont["notes"]; ok {
+		t.Errorf("recommendedRoleFont must not contain \"notes\" (ASR-5: emph fallback lives in book.typ, not Go-side)")
+	}
+
+	// Write a font.css that declares Font Body but NOT Font Notes.
+	dir := t.TempDir()
+	cssPath := filepath.Join(dir, "font.css")
+	css := "@font-face {\n  font-family: \"Font Body\";\n  src: local(\"Gentium\");\n}\n"
+	if err := os.WriteFile(cssPath, []byte(css), 0o644); err != nil {
+		t.Fatalf("write font.css: %v", err)
+	}
+	table := parseFontRoles([]string{cssPath})
+
+	// BaseRole("notes") must be empty (no Font Notes declared in font.css).
+	if fam := table.BaseRole("notes"); fam != "" {
+		t.Errorf("BaseRole(\"notes\") = %q with no Font Notes in font.css, want \"\"", fam)
+	}
+
+	// roleFontPrefix("", "notes") returns empty → font-notes: NOT emitted.
+	stack := roleFontPrefix(table.BaseRole("notes"), "notes")
+	if len(stack) != 0 {
+		t.Errorf("roleFontPrefix for undeclared notes role = %v, want empty (ASR-5: no font-notes: arg should be emitted)", stack)
+	}
+}
+
+// TestNotesRoleDeclaredEmitsFontNotes verifies SPECS §8.1: when font.css
+// declares "Font Notes", classifyFontFamily maps it to key "notes" (via
+// fontBaseRoleWords), parseFontRoles stores the local() family name under
+// that key, and roleFontPrefix returns a non-empty stack that the
+// assembleTypstDocument emit loop serializes as font-notes: ("Family",).
+func TestNotesRoleDeclaredEmitsFontNotes(t *testing.T) {
+	dir := t.TempDir()
+	cssPath := filepath.Join(dir, "font.css")
+	css := "@font-face {\n  font-family: \"Font Notes\";\n  src: local(\"Charis SIL\");\n}\n"
+	if err := os.WriteFile(cssPath, []byte(css), 0o644); err != nil {
+		t.Fatalf("write font.css: %v", err)
+	}
+	table := parseFontRoles([]string{cssPath})
+
+	family := table.BaseRole("notes")
+	if family == "" {
+		t.Fatalf("parseFontRoles: BaseRole(\"notes\") is empty with Font Notes declared in font.css — check fontBaseRoleWords[\"notes\"] and classifyFontFamily")
+	}
+	if family != "Charis SIL" {
+		t.Errorf("BaseRole(\"notes\") = %q, want %q", family, "Charis SIL")
+	}
+
+	stack := roleFontPrefix(family, "notes")
+	if len(stack) == 0 {
+		t.Fatalf("roleFontPrefix for declared notes role returned empty, want non-empty stack")
+	}
+	if stack[0] != "Charis SIL" {
+		t.Errorf("roleFontPrefix[0] = %q, want %q", stack[0], "Charis SIL")
+	}
+	// Verify the Typst arg format: ("Charis SIL",) — the trailing comma
+	// ensures book.typ receives a Typst array, never a bare string.
+	const wantTypst = `("Charis SIL",)`
+	if got := typstFontArray(stack); got != wantTypst {
+		t.Errorf("typstFontArray(notes stack) = %q, want %q", got, wantTypst)
+	}
+}

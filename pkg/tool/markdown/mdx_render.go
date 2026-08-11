@@ -726,20 +726,32 @@ func (r *mdxNodeRenderer) renderVocabulary(w util.BufWriter, source []byte, node
 		if i > 0 {
 			body.WriteString("\n")
 		}
-		body.WriteString(item.Phrase)
-		if item.Grammar != "" {
-			body.WriteString(" {")
-			body.WriteString(item.Grammar)
-			body.WriteString("}")
-		}
-		if item.Transcription != "" {
-			body.WriteString(" [")
-			body.WriteString(item.Transcription)
-			body.WriteString("]")
-		}
-		if item.Translation != "" {
-			body.WriteString(" = ")
-			body.WriteString(item.Translation)
+		// ItemHeader/ItemNote: re-serialize as literal fence line (SPECS §10).
+		switch item.Kind {
+		case ItemHeader:
+			body.WriteString(strings.Repeat("#", item.Level))
+			body.WriteString(" ")
+			body.WriteString(item.Text)
+		case ItemNote:
+			body.WriteString("(")
+			body.WriteString(item.Text)
+			body.WriteString(")")
+		default: // ItemData — unchanged serialization (ASR-3)
+			body.WriteString(item.Phrase)
+			if item.Grammar != "" {
+				body.WriteString(" {")
+				body.WriteString(item.Grammar)
+				body.WriteString("}")
+			}
+			if item.Transcription != "" {
+				body.WriteString(" [")
+				body.WriteString(item.Transcription)
+				body.WriteString("]")
+			}
+			if item.Translation != "" {
+				body.WriteString(" = ")
+				body.WriteString(item.Translation)
+			}
 		}
 	}
 	content := body.String()
@@ -792,20 +804,34 @@ func (r *mdxNodeRenderer) renderDialog(w util.BufWriter, source []byte, node gas
 
 	var body strings.Builder
 	for _, item := range n.Items {
-		if item.Header == "—" {
-			body.WriteString("--:\n")
-		} else {
-			body.WriteString("@")
-			body.WriteString(item.Header)
+		// ItemHeader/ItemNote: re-serialize as literal un-indented fence lines
+		// (SPECS §10 / D6). They are block-level, distinct from turn markers.
+		switch item.Kind {
+		case ItemHeader:
+			body.WriteString(strings.Repeat("#", item.Level))
+			body.WriteString(" ")
+			body.WriteString(item.Text)
 			body.WriteString("\n")
-		}
-		for _, line := range strings.Split(item.Content, "\n") {
-			if line == "" {
-				body.WriteString("\n")
+		case ItemNote:
+			body.WriteString("(")
+			body.WriteString(item.Text)
+			body.WriteString(")\n")
+		default: // ItemData — unchanged dialog turn serialization (ASR-3)
+			if item.Header == "—" {
+				body.WriteString("--:\n")
 			} else {
-				body.WriteString("  ")
-				body.WriteString(line)
+				body.WriteString("@")
+				body.WriteString(item.Header)
 				body.WriteString("\n")
+			}
+			for _, line := range strings.Split(item.Content, "\n") {
+				if line == "" {
+					body.WriteString("\n")
+				} else {
+					body.WriteString("  ")
+					body.WriteString(line)
+					body.WriteString("\n")
+				}
 			}
 		}
 	}
@@ -835,18 +861,17 @@ func (r *mdxNodeRenderer) renderDialog(w util.BufWriter, source []byte, node gas
 	return gast.WalkContinue, nil
 }
 
-// renderParallel emits the `parallel` fence (SPECS §4.4, a NEW format —
-// phraseforge has no remark case for it yet, D5): rows joined by a lone
-// "===" line; within a row, MainRaw and (if present) SecondaryRaw joined
-// by a lone "---" line. This losslessly mirrors parseParallelRows
-// (parser.go), which splits on "\n===\n" between rows and the LAST
-// "\n---\n" within a row — so a "---" thematic break inside a row's own
-// MainRaw content round-trips correctly. Row/cell content is the raw
-// markdown captured at parse time, emitted verbatim (fence bodies are
-// literal, SPECS §5.1) — never re-run through a renderer, unlike
-// renderParallelTypst/renderParallel (renderer.go/typst_render.go), which
-// recurse through ToHTML/ToTypst because THEIR output format is not
-// itself markdown.
+// renderParallel emits the `parallel` fence (SPECS §9): rows joined by a lone
+// "===" line; within each row, present fields are joined by lone "---" lines.
+// A 1-field row emits SourceRaw only; a 2-field row emits
+// SourceRaw+"\n---\n"+TranslationRaw; a 3-field row joins all three. This
+// losslessly mirrors parseParallelRows (parser.go), which splits on "\n===\n"
+// between rows and on every "\n---\n" within a row (capped at 3 fields,
+// ASR-3). Row/cell content is the raw markdown captured at parse time,
+// emitted verbatim (fence bodies are literal) — never re-run through a
+// renderer, unlike renderParallelTypst/renderParallel (renderer.go/
+// typst_render.go), which recurse through ToHTML/ToTypst because THEIR
+// output format is not itself markdown.
 func (r *mdxNodeRenderer) renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
 	if !entering {
 		return gast.WalkContinue, nil
@@ -858,10 +883,13 @@ func (r *mdxNodeRenderer) renderParallel(w util.BufWriter, source []byte, node g
 
 	rowStrs := make([]string, 0, len(n.Rows))
 	for _, row := range n.Rows {
-		if row.SecondaryRaw != "" {
-			rowStrs = append(rowStrs, row.MainRaw+"\n---\n"+row.SecondaryRaw)
-		} else {
-			rowStrs = append(rowStrs, row.MainRaw)
+		switch {
+		case row.TranscriptionRaw != "":
+			rowStrs = append(rowStrs, row.SourceRaw+"\n---\n"+row.TranslationRaw+"\n---\n"+row.TranscriptionRaw)
+		case row.TranslationRaw != "":
+			rowStrs = append(rowStrs, row.SourceRaw+"\n---\n"+row.TranslationRaw)
+		default:
+			rowStrs = append(rowStrs, row.SourceRaw)
 		}
 	}
 	content := strings.Join(rowStrs, "\n===\n")
@@ -916,15 +944,27 @@ func (r *mdxNodeRenderer) renderModels(w util.BufWriter, source []byte, node gas
 		if i > 0 {
 			body.WriteString("\n")
 		}
-		body.WriteString(item.Phrase)
-		if item.Transcription != "" {
-			body.WriteString(" [")
-			body.WriteString(item.Transcription)
-			body.WriteString("]")
-		}
-		if item.Translation != "" {
-			body.WriteString(" = ")
-			body.WriteString(item.Translation)
+		// ItemHeader/ItemNote: re-serialize as literal fence line (SPECS §10).
+		switch item.Kind {
+		case ItemHeader:
+			body.WriteString(strings.Repeat("#", item.Level))
+			body.WriteString(" ")
+			body.WriteString(item.Text)
+		case ItemNote:
+			body.WriteString("(")
+			body.WriteString(item.Text)
+			body.WriteString(")")
+		default: // ItemData — unchanged serialization (ASR-3)
+			body.WriteString(item.Phrase)
+			if item.Transcription != "" {
+				body.WriteString(" [")
+				body.WriteString(item.Transcription)
+				body.WriteString("]")
+			}
+			if item.Translation != "" {
+				body.WriteString(" = ")
+				body.WriteString(item.Translation)
+			}
 		}
 	}
 	content := body.String()
@@ -975,10 +1015,22 @@ func (r *mdxNodeRenderer) renderQuestions(w util.BufWriter, source []byte, node 
 		if i > 0 {
 			body.WriteString("\n")
 		}
-		body.WriteString(item.Question)
-		if item.Answer != "" {
-			body.WriteString(" = ")
-			body.WriteString(item.Answer)
+		// ItemHeader/ItemNote: re-serialize as literal fence line (SPECS §10).
+		switch item.Kind {
+		case ItemHeader:
+			body.WriteString(strings.Repeat("#", item.Level))
+			body.WriteString(" ")
+			body.WriteString(item.Text)
+		case ItemNote:
+			body.WriteString("(")
+			body.WriteString(item.Text)
+			body.WriteString(")")
+		default: // ItemData — unchanged serialization (ASR-3)
+			body.WriteString(item.Question)
+			if item.Answer != "" {
+				body.WriteString(" = ")
+				body.WriteString(item.Answer)
+			}
 		}
 	}
 	content := body.String()

@@ -183,6 +183,98 @@ func TestToHTML_Models_Golden(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------
+// SPECS §12.1 — Parser round-trip (verified through HTML rendering)
+// ---------------------------------------------------------------------
+
+// TestParseModelsHeaderAndNote asserts that a ## header and a (note) line
+// inside a models block produce ItemHeader and ItemNote items at the correct
+// positions, and that the models-group is flushed before the header (SPECS
+// §12.1, §12.2, §6 group-flush).
+func TestParseModelsHeaderAndNote(t *testing.T) {
+	input := "{start-models}\nrun = biec\n## Section\n(Learn to run)\nwalk = iść\n{end-models}\n"
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
+		"<div class=\"models\" dir=\"ltr\">\n" +
+		// First paired item in its own group.
+		"<div class=\"models-group\">\n" +
+		"<div class=\"models-item paired\">\n" +
+		"<div class=\"models-col1\">\n" +
+		"<span class=\"models-phrase\">run</span>\n" +
+		"</div>\n" +
+		"<div class=\"models-col2\">\n" +
+		"<span class=\"models-translation\" dir=\"ltr\">biec</span>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		// Block header flushes the group and renders at full width.
+		"<h2>Section</h2>\n" +
+		// Block note renders at full width outside any group.
+		"<p class=\"block-note\">Learn to run</p>\n" +
+		// Second paired item opens a new group.
+		"<div class=\"models-group\">\n" +
+		"<div class=\"models-item paired\">\n" +
+		"<div class=\"models-col1\">\n" +
+		"<span class=\"models-phrase\">walk</span>\n" +
+		"</div>\n" +
+		"<div class=\"models-col2\">\n" +
+		"<span class=\"models-translation\" dir=\"ltr\">iść</span>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n"
+	got, err := markdown.ToHTML([]byte(input))
+	if err != nil {
+		t.Fatalf("ToHTML() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+}
+
+// ---------------------------------------------------------------------
+// SPECS §12.2 — HTML render
+// ---------------------------------------------------------------------
+
+// TestRenderModelsNoteHTML asserts that a models note item flushes any open
+// models-group before emitting <p class="block-note">…</p>, and a new group
+// begins for paired items that follow (SPECS §12.2, §6 group-flush).
+func TestRenderModelsNoteHTML(t *testing.T) {
+	input := "{start-models}\nrun = biec\n(practice)\nwalk = iść\n{end-models}\n"
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
+		"<div class=\"models\" dir=\"ltr\">\n" +
+		"<div class=\"models-group\">\n" +
+		"<div class=\"models-item paired\">\n" +
+		"<div class=\"models-col1\">\n" +
+		"<span class=\"models-phrase\">run</span>\n" +
+		"</div>\n" +
+		"<div class=\"models-col2\">\n" +
+		"<span class=\"models-translation\" dir=\"ltr\">biec</span>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		// Note flushes the group and renders outside it.
+		"<p class=\"block-note\">practice</p>\n" +
+		// New group for the following paired item.
+		"<div class=\"models-group\">\n" +
+		"<div class=\"models-item paired\">\n" +
+		"<div class=\"models-col1\">\n" +
+		"<span class=\"models-phrase\">walk</span>\n" +
+		"</div>\n" +
+		"<div class=\"models-col2\">\n" +
+		"<span class=\"models-translation\" dir=\"ltr\">iść</span>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n"
+	got, err := markdown.ToHTML([]byte(input))
+	if err != nil {
+		t.Fatalf("ToHTML() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+}
+
 // TestModels_As_Rejected covers SPECS §5: models' field languages are fixed
 // (like vocabulary), so as= is rejected entirely, with a clearer message
 // than the pre-unification blanket rejection.

@@ -161,6 +161,7 @@ func assembleTypstDocument(project *EBookProject, lang, dir, cover string, bodie
 		{"font-translation", "translation"},
 		{"font-strong", "strong"},
 		{"font-emph", "emphasis"},
+		{"font-notes", "notes"},
 	} {
 		if stack := roleFontPrefix(table.BaseRole(r.key), r.key); len(stack) > 0 {
 			doc.WriteString("  " + r.arg + ": " + typstFontArray(stack) + ",\n")
@@ -307,6 +308,7 @@ var fontFields = map[string]bool{
 	"source": true, "transcription": true, "translation": true, "grammar": true,
 	"phrase": true, "question": true, "answer": true, "content": true,
 	"main": true, "secondary": true, "tag": true, "header": true,
+	"note": true,
 }
 
 var fontStyles = map[string]bool{"strong": true, "emphasis": true}
@@ -318,6 +320,7 @@ var fontStyles = map[string]bool{"strong": true, "emphasis": true}
 var fontBaseRoleWords = map[string]bool{
 	"body": true, "header": true, "transcription": true,
 	"translation": true, "strong": true, "emphasis": true,
+	"notes": true,
 }
 
 // scriptSegmentRe matches a bare ISO-15924 code shape (4 alphabetic
@@ -433,6 +436,8 @@ func baseRoleForField(field string, asTranslation bool) string {
 		return "translation"
 	case "tag", "header":
 		return "header"
+	case "note":
+		return "notes"
 	default:
 		return "body"
 	}

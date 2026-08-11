@@ -128,6 +128,98 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 	}
 }
 
+// ---------------------------------------------------------------------
+// SPECS §12.1 — Parser round-trip (verified through HTML rendering)
+// ---------------------------------------------------------------------
+
+// TestParseQuestionsHeaderAndNote asserts that a ## header and a (note) line
+// inside a questions block produce ItemHeader and ItemNote items at the correct
+// positions, and that the questions-group is flushed before the header (SPECS
+// §12.1, §12.2, §6 group-flush).
+func TestParseQuestionsHeaderAndNote(t *testing.T) {
+	input := "{start-questions}\nQ1 = A1\n## Section\n(Practice)\nQ2 = A2\n{end-questions}\n"
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">Q</span></div>\n" +
+		"<div class=\"questions\" dir=\"ltr\">\n" +
+		// First paired item in its own group.
+		"<div class=\"questions-group\">\n" +
+		"<div class=\"questions-item paired\">\n" +
+		"<div class=\"questions-col1\">\n" +
+		"<span class=\"questions-question\">Q1</span>\n" +
+		"</div>\n" +
+		"<div class=\"questions-col2\">\n" +
+		"<span class=\"questions-answer\">A1</span>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		// Block header flushes the group and renders at full width.
+		"<h2>Section</h2>\n" +
+		// Block note renders at full width outside any group.
+		"<p class=\"block-note\">Practice</p>\n" +
+		// Second paired item opens a new group.
+		"<div class=\"questions-group\">\n" +
+		"<div class=\"questions-item paired\">\n" +
+		"<div class=\"questions-col1\">\n" +
+		"<span class=\"questions-question\">Q2</span>\n" +
+		"</div>\n" +
+		"<div class=\"questions-col2\">\n" +
+		"<span class=\"questions-answer\">A2</span>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n"
+	got, err := markdown.ToHTML([]byte(input))
+	if err != nil {
+		t.Fatalf("ToHTML() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+}
+
+// ---------------------------------------------------------------------
+// SPECS §12.2 — HTML render
+// ---------------------------------------------------------------------
+
+// TestRenderQuestionsNoteHTML asserts that a questions note item flushes any
+// open questions-group before emitting <p class="block-note">…</p>, and a new
+// group begins for paired items that follow (SPECS §12.2, §6 group-flush).
+func TestRenderQuestionsNoteHTML(t *testing.T) {
+	input := "{start-questions}\nQ1 = A1\n(practice)\nQ2 = A2\n{end-questions}\n"
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">Q</span></div>\n" +
+		"<div class=\"questions\" dir=\"ltr\">\n" +
+		"<div class=\"questions-group\">\n" +
+		"<div class=\"questions-item paired\">\n" +
+		"<div class=\"questions-col1\">\n" +
+		"<span class=\"questions-question\">Q1</span>\n" +
+		"</div>\n" +
+		"<div class=\"questions-col2\">\n" +
+		"<span class=\"questions-answer\">A1</span>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		// Note flushes the group and renders outside it.
+		"<p class=\"block-note\">practice</p>\n" +
+		// New group for the following paired item.
+		"<div class=\"questions-group\">\n" +
+		"<div class=\"questions-item paired\">\n" +
+		"<div class=\"questions-col1\">\n" +
+		"<span class=\"questions-question\">Q2</span>\n" +
+		"</div>\n" +
+		"<div class=\"questions-col2\">\n" +
+		"<span class=\"questions-answer\">A2</span>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n" +
+		"</div>\n"
+	got, err := markdown.ToHTML([]byte(input))
+	if err != nil {
+		t.Fatalf("ToHTML() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToHTML() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+}
+
 // TestQuestions_As_Unification covers SPECS §5's as= unification for
 // {start-questions}: source (default, implicit) and translation are
 // accepted; any other in-grammar value (transcription/grammar, valid on

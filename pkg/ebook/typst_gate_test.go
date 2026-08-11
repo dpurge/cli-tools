@@ -132,32 +132,81 @@ func TestBookTyp_TranslationRoleBoldStaysInFamilyScript(t *testing.T) {
 	}
 }
 
-// TestBookTyp_ParallelMainBoldStaysBookLevel is the FIX-3(a) regression test
-// for the parallel per-column gate defect (SPECS §8.4): a bold word in the
-// MAIN column must NOT pick up the SECONDARY column's (foreign-script)
-// Strong substitute -- main has no per-column override at all (by design,
-// "parallel main -> book") and falls through to book()'s own book-level
-// gate, while secondary (genuinely large script here) DOES substitute via
-// its own qualified slot, and the two must differ.
-func TestBookTyp_ParallelMainBoldStaysBookLevel(t *testing.T) {
+// TestBookTyp_ParallelSourceBoldUsesGate is the updated ASR-1/ASR-7 regression
+// test for parallel per-column gate isolation (parallel-lang-script SPECS):
+// after the column-semantics reversal (ASR-1), the SOURCE column now carries
+// the per-column large-script strong/emph gate (keyed on the marker script),
+// while the TRANSLATION column has no per-column gate and falls through to
+// book()'s book-level gate. The two columns must resolve to different font
+// families to prove the gate is actually scoped to source and not leaking
+// into translation (ASR-8). Previously this test used the old "main" and
+// "secondary" dict keys; updated to "source" and "translation" as part of the
+// ASR-1 column-semantics reversal (SPECS §7.2, S5 compile-gate requirement).
+// NOTE: `source-dir` is deliberately omitted here (defaults to ltr) even
+// though script:"arab" would normally want rtl — this test only checks
+// which font FAMILY the strong gate resolves to, which direction does not
+// affect. Don't copy this call pattern for a test that cares about layout.
+func TestBookTyp_ParallelSourceBoldUsesGate(t *testing.T) {
 	typstPath, typPath := compileBookTypGateFixture(t, `
 #parallel(script: "arab", (
-  main: [Plain #strong[BOLD#context [#metadata(text.font) <main-bold>]] text.],
-  secondary: [Plain #strong[BOLD#context [#metadata(text.font) <sec-bold>]] text.],
+  source: [Plain #strong[BOLD#context [#metadata(text.font) <source-bold>]] text.],
+  translation: [Plain #strong[BOLD#context [#metadata(text.font) <trans-bold>]] text.],
 ),)
 `)
-	mainGot := typstQueryFirstFamily(t, typstPath, typPath, "<main-bold>")
-	secGot := typstQueryFirstFamily(t, typstPath, typPath, "<sec-bold>")
+	sourceGot := typstQueryFirstFamily(t, typstPath, typPath, "<source-bold>")
+	transGot := typstQueryFirstFamily(t, typstPath, typPath, "<trans-bold>")
 
-	if mainGot != "booklevelstrongfont" {
-		t.Errorf("parallel MAIN column bold resolved font = %q, want %q (book-level gate, unaffected by the secondary column's own show rule)", mainGot, "booklevelstrongfont")
+	if sourceGot != "qualifiedstrongfont" {
+		t.Errorf("parallel SOURCE column bold resolved font = %q, want %q (source has its own large-script gate keyed on the marker script, ASR-7)", sourceGot, "qualifiedstrongfont")
 	}
-	if secGot != "qualifiedstrongfont" {
-		t.Errorf("parallel SECONDARY column bold resolved font = %q, want %q (its own large-script Strong slot)", secGot, "qualifiedstrongfont")
+	if transGot != "booklevelstrongfont" {
+		t.Errorf("parallel TRANSLATION column bold resolved font = %q, want %q (translation has no per-column gate, falls through to book-level, ASR-1)", transGot, "booklevelstrongfont")
 	}
-	if mainGot == secGot {
-		t.Errorf("parallel main and secondary bold resolved to the SAME family %q -- the per-column gate scoping (SPECS §8.4) isn't actually isolating the two columns", mainGot)
+	if sourceGot == transGot {
+		t.Errorf("parallel source and translation bold resolved to the SAME family %q -- the source gate is not actually isolating (SPECS ASR-7/ASR-8)", sourceGot)
 	}
+}
+
+// TestBookTyp_ParallelTranscriptionBoldNotCapturedBySourceGate is the ASR-8
+// compile gate: bold content in the stacked TRANSCRIPTION cell must NOT be
+// captured by the SOURCE column's per-column large-script gate — the
+// transcription is rendered outside the source's inner show-rule scope (SPECS
+// §7.2, ASR-8). Prove via font: source bold uses the scoped gate
+// ("qualifiedstrongfont"), transcription bold falls through to book-level
+// ("booklevelstrongfont") — different families confirm gate isolation.
+// Also confirms a 3-field parallel row compiles cleanly (SPECS §12.4).
+// NOTE: `source-dir` is deliberately omitted (see TestBookTyp_ParallelSourceBoldUsesGate) — this test checks font resolution only.
+func TestBookTyp_ParallelTranscriptionBoldNotCapturedBySourceGate(t *testing.T) {
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#parallel(script: "arab", (
+  source: [Plain #strong[BOLD#context [#metadata(text.font) <source-bold2>]] text.],
+  translation: [Translation text.],
+  transcription: [#strong[BOLD#context [#metadata(text.font) <transcription-bold>]] roman.],
+),)
+`)
+	sourceGot := typstQueryFirstFamily(t, typstPath, typPath, "<source-bold2>")
+	transcriptionGot := typstQueryFirstFamily(t, typstPath, typPath, "<transcription-bold>")
+
+	if sourceGot != "qualifiedstrongfont" {
+		t.Errorf("parallel SOURCE column bold resolved font = %q, want %q (source gate active, marker script=arab)", sourceGot, "qualifiedstrongfont")
+	}
+	if transcriptionGot != "booklevelstrongfont" {
+		t.Errorf("parallel TRANSCRIPTION bold resolved font = %q, want %q (must fall through to book-level gate, NOT captured by source gate, ASR-8)", transcriptionGot, "booklevelstrongfont")
+	}
+	if sourceGot == transcriptionGot {
+		t.Errorf("source and transcription bold resolved to SAME family %q -- source gate is bleeding into the transcription cell (ASR-8 isolation broken)", sourceGot)
+	}
+}
+
+// TestBookTyp_ParallelNoTranscriptionKeyCompiles verifies that a 1-field and
+// 2-field parallel row (no "transcription" key) compile clean and emit no
+// stray linebreak — the "transcription" in r dict-key check correctly skips
+// the block when the key is absent (SPECS §7.2, §12.4).
+func TestBookTyp_ParallelNoTranscriptionKeyCompiles(t *testing.T) {
+	compileBookTypGateFixture(t, `
+#parallel(script: "latn", (source: [One-field row],),)
+#parallel(script: "latn", (source: [Source.], translation: [Translation.]),)
+`)
 }
 
 // TestBookTyp_VocabularyPhraseBoldFinalizes is the regression test for the
@@ -307,5 +356,102 @@ func TestBookTyp_AsTranslationNotEnlarged(t *testing.T) {
 	}
 	if !typstQueryBool(t, typstPath, typPath, "<source-content>") {
 		t.Errorf("as=source dialog content was NOT enlarged in a large (hans) script (want text.size > 12pt)")
+	}
+}
+
+// --- structured-block-headers gate tests (SPECS §12.3 / PLAN S9) ----------
+
+// sbFixtureHeader is the harness for structured-block-headers compile tests.
+// Identical in shape to bookTypGateFixtureHeader above but extends _roleFonts
+// with the notes role so _blocknote (which reads _roleFonts.get().notes) does
+// not error at runtime with an undefined dictionary key.
+const sbFixtureHeader = `
+// --- structured-block-headers test harness ---
+#_roleFonts.update((
+  body: ("BODYFONT",), header: ("HEADERFONT",), transcription: ("TRANSFONT",),
+  translation: ("TRANSFONT",), strong: ("ROLESTRONGFONT",), emph: ("ROLEEMPHFONT",),
+  notes: ("NOTESFONT",),
+))
+`
+
+// compileStructuredBlockFixture writes bookTemplate + sbFixtureHeader + body
+// to a temp .typ file and compiles it with the real typst binary.
+// Mirrors compileBookTypGateFixture but uses sbFixtureHeader (with the notes
+// role) instead of bookTypGateFixtureHeader. Skips cleanly when no typst
+// binary is available, matching every other real-typst test in this package.
+// Returns the resolved typst binary path and the fixture .typ path, ready
+// for `typst query`.
+func compileStructuredBlockFixture(t *testing.T, body string) (typstPath, typPath string) {
+	t.Helper()
+	typstPath, err := locateTypst()
+	if err != nil {
+		t.Skipf("typst binary not available: %v", err)
+	}
+
+	dir := t.TempDir()
+	typPath = filepath.Join(dir, "fixture.typ")
+	pdfPath := filepath.Join(dir, "fixture.pdf")
+	src := bookTemplate + sbFixtureHeader + "\n" + body + "\n"
+	if err := os.WriteFile(typPath, []byte(src), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	if out, err := runTypst(typstPath, "compile", typPath, pdfPath); err != nil {
+		t.Fatalf("typst compile failed: %s", out)
+	}
+	return typstPath, typPath
+}
+
+// TestBookTyp_BlockHeaderNotInOutline is the §12.3 mandatory compile gate for
+// structured-block-headers: a vocabulary block with a header item compiles
+// clean AND the block heading element has outlined:false (D4 / ASR-6) — it
+// must NOT appear in the document outline/TOC.
+//
+// A real document-level heading (= …) provides a positive control: it must
+// be outlined:true so the test detects both wrong-count and wrong-boolean
+// outcomes.
+func TestBookTyp_BlockHeaderNotInOutline(t *testing.T) {
+	typstPath, typPath := compileStructuredBlockFixture(t, `
+= Document Heading
+#vocabulary(script: "latn",
+  (kind: "header", level: 2, text: "Block Section Header"),
+  (phrase: "hello", grammar: "", transcription: "", translation: "world"),
+)
+`)
+	// Query the outlined field for every heading element in document order.
+	// Expect: [true, false] — document heading outlined, block heading not.
+	out, err := exec.Command(typstPath, "query", typPath, "heading", "--field", "outlined").Output()
+	if err != nil {
+		t.Fatalf("typst query heading outlined: %v", err)
+	}
+	var outlined []bool
+	if err := json.Unmarshal(out, &outlined); err != nil {
+		t.Fatalf("parse typst query output %q: %v", out, err)
+	}
+	if len(outlined) != 2 {
+		t.Fatalf("expected 2 headings (1 document + 1 block), got %d: %v", len(outlined), outlined)
+	}
+	if !outlined[0] {
+		t.Errorf("document heading[0].outlined = false, want true (positive control)")
+	}
+	if outlined[1] {
+		t.Errorf("block header[1].outlined = true, want false (ASR-6 / D4: block headers must NOT enter the document outline)")
+	}
+}
+
+// TestBookTyp_BlockNoteUsesNotesFont is the §12.3 mandatory compile gate for
+// the notes font role: _blocknote applies _roleFonts.get().notes to its
+// content. A #metadata(text.font) marker embedded inside the note body is
+// probed via typst query to confirm the ACTUALLY applied font matches the
+// seeded notes role ("NOTESFONT") rather than any other role (body/emph/…).
+func TestBookTyp_BlockNoteUsesNotesFont(t *testing.T) {
+	typstPath, typPath := compileStructuredBlockFixture(t, `
+#_blocknote[Test note #context [#metadata(text.font) <note-font>]]
+`)
+	got := typstQueryFirstFamily(t, typstPath, typPath, "<note-font>")
+	// Typst lowercases font names in metadata output (mirrors existing gate tests).
+	const want = "notesfont"
+	if got != want {
+		t.Errorf("block note applied font = %q, want %q (notes role seeded as NOTESFONT; ASR-5: emph fallback when font.css omits Font Notes)", got, want)
 	}
 }

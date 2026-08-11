@@ -8,7 +8,7 @@
 )
 
 #let _roleFonts = state("role-fonts", (
-  body: _baseFont, header: _baseFont, transcription: _baseFont, translation: _baseFont, strong: _baseFont, emph: _baseFont,
+  body: _baseFont, header: _baseFont, transcription: _baseFont, translation: _baseFont, strong: _baseFont, emph: _baseFont, notes: _baseFont,
 ))
 
 #let _sourceDir = state("source-dir", ltr)
@@ -152,6 +152,17 @@
   _roleFonts.get().at(base-role)
 }
 
+// Structured block helpers (SPECS §7.2 / §8.2). _blockheading emits a
+// Typst heading at the given level, excluded from the document outline
+// (outlined: false, D4 / ASR-6) so block headers never appear in the TOC
+// but still inherit book()'s per-level heading show-rules (font/size).
+// _blocknote emits centred text in the notes role font (ASR-5 fallback:
+// emphFont when font.css declares no Font Notes). No large-script gate:
+// text(font:) is called directly, bypassing book()'s strong/emph
+// interceptors (SPECS §7.2, D3).
+#let _blockheading(level, body) = heading(level: level, outlined: false)[#body]
+#let _blocknote(body) = align(center, context text(font: _roleFonts.get().notes)[#body])
+
 #let textblock(role: "source", dir: ltr, script: "", body) = {
   show heading.where(level: 1): set align(center)
   show heading.where(level: 2): set align(center)
@@ -214,51 +225,96 @@
 
 #let vocabulary(dir: ltr, script: "", ..items) = {
   set text(dir: dir)
-  block(width: 100%, grid(
-    columns: (1fr, 1fr),
-    column-gutter: 1em,
-    stroke: (y: 0.5pt + luma(220)),
-    align: (start + top, start + top),
-    inset: (x: 2pt, y: 4pt),
-    ..items.pos().map(it => (
-      {
-        // Phrase is the foreign/target field (SPECS §6): large-script gate
-        // per this block's OWN script (no Major-2 decoupling — phrase is
-        // always the block's own foreign field). The non-large branch
-        // FINALIZES via `text(weight: "bold", ...)` rather than a bare
-        // `strong(...)` call (SPECS §8.4 fix pass, residual item): a bare
-        // strong() creates a fresh element still visible to any ENCLOSING
-        // show-strong rule (book()'s own book-level large-script gate), so a
-        // non-large-script phrase nested in a large-script BOOK would
-        // otherwise get re-substituted with the book's Strong font — the
-        // same "unfinalized element leaks to the outer gate" defect fixed
-        // for textblock/dialog/parallel above, visually identical output to
-        // Typst's native bold for the common (non-large-script book) case.
-        if _isLargeScript(script) {
-          context text(font: _resolveFont(script: script, ext: "vocabulary", field: "phrase", style: "strong"), weight: "regular", size: _foreignSize(script), it.at("phrase", default: ""))
-        } else {
-          text(weight: "bold", it.at("phrase", default: ""))
-        }
-        if it.at("grammar", default: "") != "" {
-          [ ]; context text(font: _resolveFont(script: "latn", ext: "vocabulary", field: "tag"), dir: ltr, size: 0.85em, fill: gray)[#it.at("grammar")]
-        }
-        if it.at("transcription", default: "") != "" {
-          [ ]; emph[#context text(font: _resolveFont(script: "latn", ext: "vocabulary", field: "transcription"), dir: ltr)[\[#it.at("transcription")\]]]
-        }
-      },
-      context text(font: _resolveFont(script: "", ext: "vocabulary", field: "translation"), dir: ltr)[#it.at("translation", default: "")],
-    )).flatten()
-  ))
+  let run = ()
+  for it in items.pos() {
+    let k = it.at("kind", default: "data")
+    if k == "header" {
+      if run.len() > 0 {
+        block(width: 100%, grid(
+          columns: (1fr, 1fr),
+          column-gutter: 1em,
+          stroke: (y: 0.5pt + luma(220)),
+          align: (start + top, start + top),
+          inset: (x: 2pt, y: 4pt),
+          ..run
+        ))
+        run = ()
+      }
+      _blockheading(it.at("level"), it.at("text"))
+    } else {
+      // ItemData (vocabulary has no notes, D1)
+      run += (
+        {
+          // Phrase is the foreign/target field (SPECS §6): large-script gate
+          // per this block's OWN script (no Major-2 decoupling — phrase is
+          // always the block's own foreign field). The non-large branch
+          // FINALIZES via `text(weight: "bold", ...)` rather than a bare
+          // `strong(...)` call (SPECS §8.4 fix pass, residual item): a bare
+          // strong() creates a fresh element still visible to any ENCLOSING
+          // show-strong rule (book()'s own book-level large-script gate), so a
+          // non-large-script phrase nested in a large-script BOOK would
+          // otherwise get re-substituted with the book's Strong font — the
+          // same "unfinalized element leaks to the outer gate" defect fixed
+          // for textblock/dialog/parallel above, visually identical output to
+          // Typst's native bold for the common (non-large-script book) case.
+          if _isLargeScript(script) {
+            context text(font: _resolveFont(script: script, ext: "vocabulary", field: "phrase", style: "strong"), weight: "regular", size: _foreignSize(script), it.at("phrase", default: ""))
+          } else {
+            text(weight: "bold", it.at("phrase", default: ""))
+          }
+          if it.at("grammar", default: "") != "" {
+            [ ]; context text(font: _resolveFont(script: "latn", ext: "vocabulary", field: "tag"), dir: ltr, size: 0.85em, fill: gray)[#it.at("grammar")]
+          }
+          if it.at("transcription", default: "") != "" {
+            [ ]; emph[#context text(font: _resolveFont(script: "latn", ext: "vocabulary", field: "transcription"), dir: ltr)[\[#it.at("transcription")\]]]
+          }
+        },
+        context text(font: _resolveFont(script: "", ext: "vocabulary", field: "translation"), dir: ltr)[#it.at("translation", default: "")],
+      )
+    }
+  }
+  if run.len() > 0 {
+    block(width: 100%, grid(
+      columns: (1fr, 1fr),
+      column-gutter: 1em,
+      stroke: (y: 0.5pt + luma(220)),
+      align: (start + top, start + top),
+      inset: (x: 2pt, y: 4pt),
+      ..run
+    ))
+  }
 }
 
 #let models(dir: ltr, script: "", ..items) = {
   set text(dir: dir)
-  block(width: 100%, grid(
-    columns: (1fr, 1fr),
-    column-gutter: 1em,
-    align: (start + top, start + top),
-    inset: (x: 2pt, y: 4pt),
-    ..items.pos().map(it => {
+  let run = ()
+  for it in items.pos() {
+    let k = it.at("kind", default: "data")
+    if k == "header" {
+      if run.len() > 0 {
+        block(width: 100%, grid(
+          columns: (1fr, 1fr),
+          column-gutter: 1em,
+          align: (start + top, start + top),
+          inset: (x: 2pt, y: 4pt),
+          ..run
+        ))
+        run = ()
+      }
+      _blockheading(it.at("level"), it.at("text"))
+    } else if k == "note" {
+      if run.len() > 0 {
+        block(width: 100%, grid(
+          columns: (1fr, 1fr),
+          column-gutter: 1em,
+          align: (start + top, start + top),
+          inset: (x: 2pt, y: 4pt),
+          ..run
+        ))
+        run = ()
+      }
+      _blocknote(it.at("text"))
+    } else {
       let phrase = it.at("phrase", default: "")
       let transcription = it.at("transcription", default: "")
       let translation = it.at("translation", default: "")
@@ -273,9 +329,9 @@
         text(weight: "bold", phrase)
       }
       if transcription == "" and translation == "" {
-        (grid.cell(colspan: 2, phraseContent),)
+        run += (grid.cell(colspan: 2, phraseContent),)
       } else {
-        (
+        run += (
           {
             phraseContent
             if transcription != "" and translation != "" {
@@ -290,8 +346,17 @@
           } else { [] },
         )
       }
-    }).flatten()
-  ))
+    }
+  }
+  if run.len() > 0 {
+    block(width: 100%, grid(
+      columns: (1fr, 1fr),
+      column-gutter: 1em,
+      align: (start + top, start + top),
+      inset: (x: 2pt, y: 4pt),
+      ..run
+    ))
+  }
 }
 
 // role: carries the block's as= attribute value ("source"/"translation");
@@ -307,20 +372,35 @@
   let familyScript = if asTranslation { "" } else { script }
   let run = ()
   for it in items.pos() {
-    let question = it.at("question", default: "")
-    let answer = it.at("answer", default: "")
-    if answer != "" {
-      run += (
-        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: _foreignSize(familyScript), question),
-        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "answer", as-translation: asTranslation), size: _foreignSize(familyScript), answer),
-      )
-    } else {
+    let k = it.at("kind", default: "data")
+    if k == "header" {
       if run.len() > 0 {
         grid(columns: (auto, 1fr), column-gutter: 1em, row-gutter: 0.5em, align: (start + top, start + top), ..run)
         run = ()
       }
-      context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: _foreignSize(familyScript), question)
-      parbreak()
+      _blockheading(it.at("level"), it.at("text"))
+    } else if k == "note" {
+      if run.len() > 0 {
+        grid(columns: (auto, 1fr), column-gutter: 1em, row-gutter: 0.5em, align: (start + top, start + top), ..run)
+        run = ()
+      }
+      _blocknote(it.at("text"))
+    } else {
+      let question = it.at("question", default: "")
+      let answer = it.at("answer", default: "")
+      if answer != "" {
+        run += (
+          context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: _foreignSize(familyScript), question),
+          context text(font: _resolveFont(script: familyScript, ext: "questions", field: "answer", as-translation: asTranslation), size: _foreignSize(familyScript), answer),
+        )
+      } else {
+        if run.len() > 0 {
+          grid(columns: (auto, 1fr), column-gutter: 1em, row-gutter: 0.5em, align: (start + top, start + top), ..run)
+          run = ()
+        }
+        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: _foreignSize(familyScript), question)
+        parbreak()
+      }
     }
   }
   if run.len() > 0 {
@@ -358,60 +438,103 @@
     context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", style: "emphasis", as-translation: asTranslation), style: "normal", it.body)
   } else { text(style: "italic", it.body) }
 
-  block(width: 100%, grid(
-    columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
-    ..turns.pos().map(t => (
-      if _isLargeScript(familyScript) {
-        context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "header", style: "strong", as-translation: asTranslation), weight: "regular", size: _foreignSize(familyScript), t.at("header", default: ""))
-      } else {
-        text(weight: "bold", t.at("header", default: ""))
-      },
-      context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", as-translation: asTranslation), size: _foreignSize(familyScript))[#t.at("content", default: [])],
-    )).flatten()
-  ))
+  let run = ()
+  for t in turns.pos() {
+    let k = t.at("kind", default: "data")
+    if k == "header" {
+      if run.len() > 0 {
+        block(width: 100%, grid(
+          columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
+          ..run
+        ))
+        run = ()
+      }
+      _blockheading(t.at("level"), t.at("text"))
+    } else if k == "note" {
+      if run.len() > 0 {
+        block(width: 100%, grid(
+          columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
+          ..run
+        ))
+        run = ()
+      }
+      _blocknote(t.at("text"))
+    } else {
+      run += (
+        if _isLargeScript(familyScript) {
+          context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "header", style: "strong", as-translation: asTranslation), weight: "regular", size: _foreignSize(familyScript), t.at("header", default: ""))
+        } else {
+          text(weight: "bold", t.at("header", default: ""))
+        },
+        context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", as-translation: asTranslation), size: _foreignSize(familyScript))[#t.at("content", default: [])],
+      )
+    }
+  }
+  if run.len() > 0 {
+    block(width: 100%, grid(
+      columns: (auto, 1fr), column-gutter: 0.8em, row-gutter: 0.5em,
+      ..run
+    ))
+  }
 }
 
-#let parallel(secondary-dir: ltr, script: "", ..rows) = {
-  // SPECS §8.4 (review-amended 2026-07-31): parallel needs per-COLUMN gate
-  // scopes, not one block-scoped rule — installing a single show strong/emph
-  // rule for the whole parallel() scope (the code-review defect) rewrote
-  // bold text in the MAIN column too (e.g. a bold Latin word in main got the
-  // secondary column's Arabic Strong font, bold lost). Each row below wraps
-  // ONLY the secondary cell in its own local scope.
+#let parallel(source-dir: ltr, script: "", ..rows) = {
+  // Column semantics (SPECS ASR-1, deliberate reversal of the shipped
+  // SR-1/SR-2 rule): the PRIMARY column (element 1) now carries the SOURCE —
+  // marker-driven direction (`source-dir`), font, and large-script size
+  // (_foreignSize, ASR-7). The SECONDARY column (element 2) carries the
+  // TRANSLATION — book language, no marker override; it inherits the book's
+  // ambient direction (no `dir:` override here, ASR-4).
+  //
+  // Per-column gate placement:
+  // - SOURCE: the large-script strong/emph gate (keyed `field:"source"` +
+  //   the marker `script`) is installed inside an INNER scope so it cannot
+  //   capture bold/emph in the stacked transcription below (ASR-8). The
+  //   "else" branch finalizes via `text(weight:/style:, ...)` (not bare `it`)
+  //   so a non-large source nested in a large-script book cannot leak to
+  //   book()'s outer gate (same reasoning as textblock/dialog/vocabulary).
+  // - TRANSCRIPTION: stacked below the source inside the primary cell,
+  //   OUTSIDE the source's inner scope so its bold/emph falls through to
+  //   book()'s book-level gate. Pinned script:"latn"/dir:ltr (matches
+  //   vocabulary/models transcription exactly, ASR-6). Present only when the
+  //   row dict carries the "transcription" key — the Go renderer omits the
+  //   key entirely when absent (§7.1), so dict-key membership is the correct
+  //   check here (reviewer-flagged idiom, SPECS §7.2).
+  // - TRANSLATION: no scoped gate — its bold/emph falls through to book()'s
+  //   book-level large-script gate, exactly as the old "main" element did
+  //   ("parallel main -> book", deliberately absent, not a separate
+  //   mechanism). No `dir:` override — inherits book ambient direction
+  //   (ASR-1/ASR-4 reversal: the old secondary carried secondary-dir; the
+  //   new translation inherits book direction).
   block(width: 100%, grid(
     columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em,
     stroke: (x: 0.5pt + luma(230)),
     align: (start + top, start + top),
     ..rows.pos().map(r => (
-      // Main is the book's OWN column (SPECS §6: "inherits the book's
-      // language, script, direction, and body font — it has no
-      // marker-derived override"). No show rule is installed here for it —
-      // its bold/emph therefore falls through unaffected to book()'s own
-      // book-level Strong/Emphasis gate ("parallel main -> book"), which
-      // already uses the book's own script/font. That IS main's per-column
-      // gate: deliberately absent, not a separate mechanism.
-      r.at("main", default: []),
       {
-        // Secondary is always the Translation-role column (Major-2: fixed
-        // base script for the FAMILY chain, decoupled from this block's own
-        // foreign `script`, since main/secondary already carry both
-        // languages — as= is not accepted here). This show rule is scoped to
-        // ONLY this cell's own code block, so it can never rewrite the MAIN
-        // column's bold in the same row. The Strong gate uses the column's
-        // own `script`, so a genuinely large-script secondary column still
-        // substitutes correctly even in a small-script book. The "else"
-        // branch finalizes via `text(weight:/style:, ...)` (not `it`) so a
-        // non-large secondary column's bold can't leak out to book()'s own
-        // book-level large-script gate when the book itself IS large script
-        // (same reasoning as textblock/dialog above).
-        show strong: it => if _isLargeScript(script) {
-          context text(font: _resolveFont(script: "", ext: "parallel", field: "secondary", style: "strong"), weight: "regular", it.body)
-        } else { text(weight: "bold", it.body) }
-        show emph: it => if _isLargeScript(script) {
-          context text(font: _resolveFont(script: "", ext: "parallel", field: "secondary", style: "emphasis"), style: "normal", it.body)
-        } else { text(style: "italic", it.body) }
-        context text(dir: secondary-dir, font: _resolveFont(script: "", ext: "parallel", field: "secondary"))[#r.at("secondary", default: [])]
+        // SOURCE — inner scope so the gate below cannot bleed into the
+        // transcription stacked after this scope closes (ASR-8).
+        {
+          show strong: it => if _isLargeScript(script) {
+            context text(font: _resolveFont(script: script, ext: "parallel", field: "source", style: "strong"), weight: "regular", it.body)
+          } else { text(weight: "bold", it.body) }
+          show emph: it => if _isLargeScript(script) {
+            context text(font: _resolveFont(script: script, ext: "parallel", field: "source", style: "emphasis"), style: "normal", it.body)
+          } else { text(style: "italic", it.body) }
+          context text(dir: source-dir, font: _resolveFont(script: script, ext: "parallel", field: "source"), size: _foreignSize(script))[#r.at("source", default: [])]
+        }
+        // TRANSCRIPTION (pinned latn/ltr, matches vocabulary/models, ASR-6)
+        // — outside the source scope so its bold/emph falls through to
+        // book()'s book-level gate (ASR-8).
+        if "transcription" in r {
+          linebreak()
+          context text(dir: ltr, font: _resolveFont(script: "latn", ext: "parallel", field: "transcription"))[#r.at("transcription")]
+        }
       },
+      // TRANSLATION — no scoped gate; bold/emph falls through to book()'s
+      // book-level large-script gate (deliberately absent, not a separate
+      // mechanism). No dir: override — inherits book ambient direction.
+      context text(font: _resolveFont(script: "", ext: "parallel", field: "translation"))[#r.at("translation", default: [])],
     )).flatten()
   ))
 }
@@ -435,6 +558,7 @@
   font-translation: (),
   font-strong: (),
   font-emph: (),
+  font-notes: (),
   font-slots: (:),
   book-script: "",
   contents-title: [Contents],
@@ -450,6 +574,7 @@
     translation: font-translation + font,
     strong: strongFont,
     emph: emphFont,
+    notes: if font-notes == () { emphFont } else { font-notes + font },
   ))
   _sourceDir.update(dir)
   _fontSlots.update(font-slots)

@@ -82,6 +82,16 @@ func getVocabulary(filename string) ([]string, error) {
 		}
 
 		if inVocabulary {
+			// Skip ATX header lines (# through ######) — SPECS §9 / PLAN S8.
+			// Implements ^#{1,6}(\s|$): count leading '#', accept only 1-6,
+			// followed by whitespace or end-of-line.
+			n := 0
+			for n < len(line) && line[n] == '#' {
+				n++
+			}
+			if n >= 1 && n <= 6 && (n == len(line) || line[n] == ' ' || line[n] == '\t') {
+				continue
+			}
 			lines = append(lines, line)
 		}
 

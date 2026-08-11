@@ -22,9 +22,32 @@ var (
 	KindText        = gast.NewNodeKind("Text") // MUST be last; highest ordinal (ASR-1)
 )
 
+// ItemKind discriminates the kind of item within a structured block.
+// The zero value is ItemData, so all pre-existing item struct literals that
+// omit Kind remain ItemData, producing byte-identical output for
+// header/note-free blocks (ASR-3).
+type ItemKind uint8
+
+const (
+	ItemData   ItemKind = iota // default: existing data fields populated
+	ItemHeader                 // Level (1-6) + Text carry the heading
+	ItemNote                   // Text carries the note (parens stripped); never produced for VocabularyItem (D1)
+)
+
+// BlockAnnotation carries the discriminated-union fields added to every
+// structured-block item type. Embedding it in an item struct promotes Kind,
+// Level, and Text with zero values (ItemData, 0, "") that leave all
+// pre-existing struct literals unchanged (ASR-3).
+type BlockAnnotation struct {
+	Kind  ItemKind
+	Level int    // 1-6 for ItemHeader; 0 otherwise
+	Text  string // heading/note text; "" for ItemData
+}
+
 // VocabularyItem is one parsed `{start-vocabulary}` line: a phrase plus its
 // optional grammar tag, transcription and translation.
 type VocabularyItem struct {
+	BlockAnnotation
 	Phrase        string
 	Grammar       string
 	Transcription string
@@ -64,6 +87,7 @@ func (n *Vocabulary) Dump(source []byte, level int) {
 // converted to HTML recursively (via the package converter) only at render
 // time, never during parsing.
 type DialogItem struct {
+	BlockAnnotation
 	Header  string
 	Content string
 }
@@ -95,12 +119,15 @@ func (n *Dialog) Dump(source []byte, level int) {
 	gast.DumpHelper(n, source, level, nil, nil)
 }
 
-// ParallelRow is one row of a `{start-parallel}` block: the raw main-cell
-// markdown, and — if the row has a `---` separator — the raw secondary-cell
-// markdown. Both are converted to HTML recursively at render time.
+// ParallelRow is one row of a {start-parallel} block. Fields are split on
+// every lone "---" (up to 3, SPECS §3.2): the source-cell markdown, the
+// optional translation-cell markdown, and the optional transcription markdown
+// (stacked under the source in the primary column). All are converted
+// recursively at render time.
 type ParallelRow struct {
-	MainRaw      string
-	SecondaryRaw string
+	SourceRaw        string // field 1 — marker lang/script (was: MainRaw)
+	TranslationRaw   string // field 2 — book language      (was: SecondaryRaw)
+	TranscriptionRaw string // field 3 — pinned Latin/LTR romanization (NEW)
 }
 
 // Parallel is the block node for a `{start-parallel}` ... `{end-parallel}`
@@ -130,6 +157,7 @@ func (n *Parallel) Dump(source []byte, level int) {
 // optional transcription and translation. Like VocabularyItem, minus
 // Grammar (Cycle 1 scope: no grammar tag, no notes).
 type ModelsItem struct {
+	BlockAnnotation
 	Phrase        string
 	Transcription string
 	Translation   string
@@ -162,6 +190,7 @@ func (n *Models) Dump(source []byte, level int) {
 // optional answer. A line with no answer is a question-only line, rendered
 // in normal paragraph (body-font) style rather than as a two-column row.
 type QuestionItem struct {
+	BlockAnnotation
 	Question string
 	Answer   string
 }

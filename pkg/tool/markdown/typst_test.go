@@ -3,6 +3,7 @@ package markdown_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/dpurge/cli-tools/pkg/tool/markdown"
@@ -415,12 +416,13 @@ func TestToTypst_Dialog_Err(t *testing.T) {
 	}
 }
 
-// TestToTypst_Parallel_Golden covers the #parallel(...) custom-block
-// mapping, including two SPECS-critical behaviors in one fixture: (1) a
-// row whose MAIN cell contains its own thematic break ("---") must still
-// split its secondary cell off at the LAST "---" line
-// (parser.go:286-306), and (2) a row with no secondary cell emits an
-// empty `secondary: []` rather than invoking ToTypst on an empty string.
+// TestToTypst_Parallel_Golden covers the #parallel(...) custom-block mapping
+// with the NEW (post-ASR-1/ASR-3) semantics:
+//   - Parameter renamed: `source-dir:` (was `secondary-dir:`).
+//   - Row dict keys: `source:` (was `main:`), `translation:` (was `secondary:`),
+//     plus optional `transcription:` when TranscriptionRaw != "".
+//   - Every "---" is a field separator (ASR-3): two "---" lines → 3 fields.
+//   - Empty `translation: []` is emitted when TranslationRaw=="" (unchanged).
 func TestToTypst_Parallel_Golden(t *testing.T) {
 	runTypstGolden(t, []struct {
 		name  string
@@ -428,7 +430,12 @@ func TestToTypst_Parallel_Golden(t *testing.T) {
 		want  string
 	}{
 		{
-			name: "LAST '---' split in main cell, plus a row with empty secondary",
+			// Was: "LAST '---' split in main cell, plus a row with empty secondary"
+			// Now (ASR-3): two "---" lines split into 3 fields:
+			//   source="First para.", translation="Second para in main.",
+			//   transcription="Secondary cell."
+			// Row 2 is source-only → translation: [] emitted (no transcription key).
+			name: "three-field row then source-only row (ASR-3 new split behavior)",
 			input: "{start-parallel}\n" +
 				"First para.\n" +
 				"\n" +
@@ -440,26 +447,103 @@ func TestToTypst_Parallel_Golden(t *testing.T) {
 				"===\n" +
 				"Row2 main only.\n" +
 				"{end-parallel}\n",
-			want: "#parallel(secondary-dir: ltr, script: \"\",\n" +
-				"  (main: [First para\\.\n\n#line(length: 100%)\nSecond para in main\\.\n\n], secondary: [Secondary cell\\.\n\n]),\n" +
-				"  (main: [Row2 main only\\.\n\n], secondary: []),\n" +
+			want: "#parallel(source-dir: ltr, script: \"\",\n" +
+				"  (source: [First para\\.\n\n], translation: [Second para in main\\.\n\n], transcription: [Secondary cell\\.\n\n]),\n" +
+				"  (source: [Row2 main only\\.\n\n], translation: []),\n" +
 				")\n\n",
 		},
 		{
-			// The marker script drives the SECONDARY column's direction:
-			// script=arab (RTL) emits `secondary-dir: rtl`. The main column
-			// is unwrapped and inherits the ambient book direction in book.typ.
-			name: "script=arab emits secondary-dir: rtl",
+			// script=arab: the SOURCE column now gets source-dir: rtl (ASR-1 reversal —
+			// the old behavior drove the SECONDARY column's direction from the marker).
+			name: "script=arab emits source-dir: rtl (ASR-1 reversal)",
 			input: "{start-parallel script=arab}\n" +
 				"Main.\n" +
 				"---\n" +
 				"Secondary.\n" +
 				"{end-parallel}\n",
-			want: "#parallel(secondary-dir: rtl, script: \"arab\",\n" +
-				"  (main: [Main\\.\n\n], secondary: [Secondary\\.\n\n]),\n" +
+			want: "#parallel(source-dir: rtl, script: \"arab\",\n" +
+				"  (source: [Main\\.\n\n], translation: [Secondary\\.\n\n]),\n" +
 				")\n\n",
 		},
 	})
+}
+
+// ---------------------------------------------------------------------
+// SPECS §12.3 — Typst emission (Go-side dict-string assertions)
+// The Typst compile gate lives in pkg/ebook/typst_gate_test.go (already done).
+// These tests verify the Go-side string emission only.
+// ---------------------------------------------------------------------
+
+// TestToTypst_Parallel_TwoFields asserts the exact Go-side Typst emission for a
+// two-field parallel block (source + translation, NO transcription key):
+//   - `source-dir:` param (not `secondary-dir:`)
+//   - row dict: `(source: [...], translation: [...])`
+//   - `transcription:` key is genuinely ABSENT (key omission, not empty content)
+func TestToTypst_Parallel_TwoFields(t *testing.T) {
+	input := "{start-parallel script=latn}\nsource text\n---\ntranslation text\n{end-parallel}\n"
+	want := "#parallel(source-dir: ltr, script: \"latn\",\n" +
+		"  (source: [source text\n\n], translation: [translation text\n\n]),\n" +
+		")\n\n"
+
+	got, err := markdown.ToTypst([]byte(input))
+	if err != nil {
+		t.Fatalf("ToTypst() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToTypst() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+	// Assert the param rename explicitly: old name must not appear.
+	if strings.Contains(string(got), "secondary-dir:") {
+		t.Error("must not contain old param name 'secondary-dir:' (renamed to 'source-dir:', ASR-1)")
+	}
+	// Assert transcription key is genuinely absent (not just empty).
+	// book.typ detects transcription presence via "transcription" in r (dict-key membership).
+	if strings.Contains(string(got), "transcription:") {
+		t.Error("two-field row must have NO 'transcription:' key in the dict (key omission, not empty content)")
+	}
+}
+
+// TestToTypst_Parallel_ThreeFields asserts the Go-side Typst emission for a
+// three-field parallel block: the `transcription:` key is present in the row dict,
+// using the pinned script="latn" resolution at Typst runtime (ASR-6).
+func TestToTypst_Parallel_ThreeFields(t *testing.T) {
+	input := "{start-parallel script=latn}\nsource\n---\ntranslation\n---\ntranscription\n{end-parallel}\n"
+	want := "#parallel(source-dir: ltr, script: \"latn\",\n" +
+		"  (source: [source\n\n], translation: [translation\n\n], transcription: [transcription\n\n]),\n" +
+		")\n\n"
+
+	got, err := markdown.ToTypst([]byte(input))
+	if err != nil {
+		t.Fatalf("ToTypst() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToTypst() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+	// transcription key must be present (book.typ: "transcription" in r).
+	if !strings.Contains(string(got), "transcription:") {
+		t.Error("three-field row must have 'transcription:' key in the dict")
+	}
+}
+
+// TestToTypst_Parallel_RTLSource asserts that script=arab produces `source-dir: rtl`
+// (the source direction follows the marker, ASR-4). Assert the old param name is absent.
+func TestToTypst_Parallel_RTLSource(t *testing.T) {
+	input := "{start-parallel script=arab}\nsource\n---\ntranslation\n{end-parallel}\n"
+	want := "#parallel(source-dir: rtl, script: \"arab\",\n" +
+		"  (source: [source\n\n], translation: [translation\n\n]),\n" +
+		")\n\n"
+
+	got, err := markdown.ToTypst([]byte(input))
+	if err != nil {
+		t.Fatalf("ToTypst() unexpected error: %v", err)
+	}
+	if string(got) != want {
+		t.Fatalf("ToTypst() mismatch\n got: %q\nwant: %q", string(got), want)
+	}
+	// The param rename must be complete everywhere.
+	if strings.Contains(string(got), "secondary-dir:") {
+		t.Error("must not contain old param name 'secondary-dir:' anywhere in output")
+	}
 }
 
 // TestToTypst_EscapeTypstMarkup covers escapeTypstMarkup's full metachar
@@ -607,6 +691,79 @@ func TestToTypst_Questions_Golden(t *testing.T) {
 			want: "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"Q\")]\n\n" +
 				"#questions(dir: ltr, script: \"\", role: \"source\",\n" +
 				"  (question: \"Where are you from?\", answer: \"Poland\"),\n" +
+				")\n\n",
+		},
+	})
+}
+
+// ---------------------------------------------------------------------
+// SPECS §12.3 — Typst snapshot (Go-side dict-string assertions only)
+// The optional Typst compile gate lives in pkg/ebook/typst_gate_test.go.
+// ---------------------------------------------------------------------
+
+// TestRenderVocabularyHeaderTypst asserts that a vocabulary block header item
+// emits the exact dict `(kind: "header", level: N, text: "…")` in the Typst
+// output, while surrounding data items keep their existing dict shape with no
+// `kind` key (SPECS §12.3, §7.1, ASR-3).
+func TestRenderVocabularyHeaderTypst(t *testing.T) {
+	runTypstGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "header mid-block: surrounding data items keep existing shape",
+			input: "{start-vocabulary}\nphrase1 = t1\n## Heading\nphrase2 = t2\n{end-vocabulary}\n",
+			want: "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"V\")]\n\n" +
+				"#vocabulary(dir: ltr, script: \"\",\n" +
+				"  (phrase: \"phrase1\", grammar: \"\", transcription: \"\", translation: \"t1\"),\n" +
+				"  (kind: \"header\", level: 2, text: \"Heading\"),\n" +
+				"  (phrase: \"phrase2\", grammar: \"\", transcription: \"\", translation: \"t2\"),\n" +
+				")\n\n",
+		},
+	})
+}
+
+// TestRenderDialogNoteTypst asserts that a dialog note item emits the exact
+// dict `(kind: "note", text: "…")` in the Typst output, and that the
+// surrounding dialog turn emits its existing dict shape with no `kind` key
+// (SPECS §12.3, §7.1, ASR-3).
+func TestRenderDialogNoteTypst(t *testing.T) {
+	runTypstGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "note after an anonymous turn: turn keeps existing shape",
+			input: "{start-dialog}\n--:\n  Hello.\n(Note text)\n{end-dialog}\n",
+			want: "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"D\")]\n\n" +
+				"#dialog(dir: ltr, script: \"\", role: \"source\",\n" +
+				"  (header: \"—\", content: [Hello\\.\n\n]),\n" +
+				"  (kind: \"note\", text: \"Note text\"),\n" +
+				")\n\n",
+		},
+	})
+}
+
+// TestRenderTypstDataOnlyUnchanged is the ASR-3 byte-identical regression
+// control for the Typst renderer: a data-only block must emit NO `kind` key in
+// any dict entry and produce output identical to the pre-change golden (SPECS
+// §12.3, ASR-3).
+func TestRenderTypstDataOnlyUnchanged(t *testing.T) {
+	runTypstGolden(t, []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			// Mirrors TestToTypst_Vocabulary_Golden "phrase only" — byte-identical
+			// to the pre-change golden (no `kind` key must appear).
+			name:  "vocabulary data-only: no kind key in dict",
+			input: "{start-vocabulary}\n再见\n{end-vocabulary}\n",
+			want: "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"V\")]\n\n" +
+				"#vocabulary(dir: ltr, script: \"\",\n" +
+				"  (phrase: \"再见\", grammar: \"\", transcription: \"\", translation: \"\"),\n" +
 				")\n\n",
 		},
 	})

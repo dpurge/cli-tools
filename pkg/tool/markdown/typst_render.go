@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"io"
+	"strconv"
 	"strings"
 
 	gast "github.com/yuin/goldmark/ast"
@@ -471,15 +472,29 @@ func renderVocabularyTypst(w util.BufWriter, source []byte, node gast.Node, ente
 	io.WriteString(w, escapeTypstString(n.Script))
 	io.WriteString(w, "\",\n")
 	for _, item := range n.Items {
-		io.WriteString(w, `  (phrase: "`)
-		io.WriteString(w, escapeTypstString(item.Phrase))
-		io.WriteString(w, `", grammar: "`)
-		io.WriteString(w, escapeTypstString(item.Grammar))
-		io.WriteString(w, `", transcription: "`)
-		io.WriteString(w, escapeTypstString(item.Transcription))
-		io.WriteString(w, `", translation: "`)
-		io.WriteString(w, escapeTypstString(item.Translation))
-		io.WriteString(w, "\"),\n")
+		switch item.Kind {
+		case ItemHeader:
+			// (kind: "header", level: N, text: "…") — data items carry no kind key (ASR-3).
+			io.WriteString(w, `  (kind: "header", level: `)
+			io.WriteString(w, strconv.Itoa(item.Level))
+			io.WriteString(w, `, text: "`)
+			io.WriteString(w, escapeTypstString(item.Text))
+			io.WriteString(w, "\"),\n")
+		case ItemNote:
+			io.WriteString(w, `  (kind: "note", text: "`)
+			io.WriteString(w, escapeTypstString(item.Text))
+			io.WriteString(w, "\"),\n")
+		default: // ItemData — unchanged dict shape (ASR-3)
+			io.WriteString(w, `  (phrase: "`)
+			io.WriteString(w, escapeTypstString(item.Phrase))
+			io.WriteString(w, `", grammar: "`)
+			io.WriteString(w, escapeTypstString(item.Grammar))
+			io.WriteString(w, `", transcription: "`)
+			io.WriteString(w, escapeTypstString(item.Transcription))
+			io.WriteString(w, `", translation: "`)
+			io.WriteString(w, escapeTypstString(item.Translation))
+			io.WriteString(w, "\"),\n")
+		}
 	}
 	io.WriteString(w, ")\n\n")
 
@@ -515,26 +530,40 @@ func renderDialogTypst(w util.BufWriter, source []byte, node gast.Node, entering
 	io.WriteString(w, escapeTypstString(role))
 	io.WriteString(w, "\",\n")
 	for _, item := range n.Items {
-		content, err := ToTypst([]byte(item.Content))
-		if err != nil {
-			return gast.WalkStop, err
+		switch item.Kind {
+		case ItemHeader:
+			io.WriteString(w, `  (kind: "header", level: `)
+			io.WriteString(w, strconv.Itoa(item.Level))
+			io.WriteString(w, `, text: "`)
+			io.WriteString(w, escapeTypstString(item.Text))
+			io.WriteString(w, "\"),\n")
+		case ItemNote:
+			io.WriteString(w, `  (kind: "note", text: "`)
+			io.WriteString(w, escapeTypstString(item.Text))
+			io.WriteString(w, "\"),\n")
+		default: // ItemData — unchanged dict shape (ASR-3)
+			content, err := ToTypst([]byte(item.Content))
+			if err != nil {
+				return gast.WalkStop, err
+			}
+			io.WriteString(w, `  (header: "`)
+			io.WriteString(w, escapeTypstString(item.Header))
+			io.WriteString(w, `", content: [`)
+			w.Write(content)
+			io.WriteString(w, "]),\n")
 		}
-		io.WriteString(w, `  (header: "`)
-		io.WriteString(w, escapeTypstString(item.Header))
-		io.WriteString(w, `", content: [`)
-		w.Write(content)
-		io.WriteString(w, "]),\n")
 	}
 	io.WriteString(w, ")\n\n")
 
 	return gast.WalkContinue, nil
 }
 
-// renderParallelTypst emits `#parallel((main:[<ToTypst(MainRaw)>],
-// secondary:[<ToTypst(SecondaryRaw)>]), ...)`. Both cells recurse through
-// ToTypst, mirroring renderParallel (renderer.go:97-112); a row with no
-// secondary cell (SecondaryRaw == "") emits an empty `secondary: []`
-// rather than calling ToTypst on an empty string.
+// renderParallelTypst emits `#parallel(source-dir: <dir>, script: "<script>",
+// (<row dict>, ...), ...)` (SPECS §7.1). Per row, the dict always carries
+// `source:` and `translation:` (empty `[]` when absent); `transcription:` is
+// emitted ONLY when TranscriptionRaw != "" — key omission (not empty content)
+// is how book.typ's parallel() detects transcription presence via
+// "transcription" in r (§7.2, reviewer-flagged dict-key-presence idiom).
 func renderParallelTypst(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
 	if !entering {
 		return gast.WalkContinue, nil
@@ -544,28 +573,38 @@ func renderParallelTypst(w util.BufWriter, source []byte, node gast.Node, enteri
 		return gast.WalkStop, n.Err
 	}
 
-	secondaryDir := blockDirection(n.Script)
-	io.WriteString(w, "#parallel(secondary-dir: ")
-	io.WriteString(w, secondaryDir)
+	sourceDir := blockDirection(n.Script)
+	io.WriteString(w, "#parallel(source-dir: ")
+	io.WriteString(w, sourceDir)
 	io.WriteString(w, `, script: "`)
 	io.WriteString(w, escapeTypstString(n.Script))
 	io.WriteString(w, "\",\n")
 	for _, row := range n.Rows {
-		mainContent, err := ToTypst([]byte(row.MainRaw))
+		sourceContent, err := ToTypst([]byte(row.SourceRaw))
 		if err != nil {
 			return gast.WalkStop, err
 		}
-		io.WriteString(w, "  (main: [")
-		w.Write(mainContent)
-		io.WriteString(w, "], secondary: [")
-		if row.SecondaryRaw != "" {
-			secondaryContent, err := ToTypst([]byte(row.SecondaryRaw))
+		io.WriteString(w, "  (source: [")
+		w.Write(sourceContent)
+		io.WriteString(w, "], translation: [")
+		if row.TranslationRaw != "" {
+			translationContent, err := ToTypst([]byte(row.TranslationRaw))
 			if err != nil {
 				return gast.WalkStop, err
 			}
-			w.Write(secondaryContent)
+			w.Write(translationContent)
 		}
-		io.WriteString(w, "]),\n")
+		io.WriteString(w, "]")
+		if row.TranscriptionRaw != "" {
+			transcriptionContent, err := ToTypst([]byte(row.TranscriptionRaw))
+			if err != nil {
+				return gast.WalkStop, err
+			}
+			io.WriteString(w, ", transcription: [")
+			w.Write(transcriptionContent)
+			io.WriteString(w, "]")
+		}
+		io.WriteString(w, "),\n")
 	}
 	io.WriteString(w, ")\n\n")
 
@@ -594,13 +633,26 @@ func renderModelsTypst(w util.BufWriter, source []byte, node gast.Node, entering
 	io.WriteString(w, escapeTypstString(n.Script))
 	io.WriteString(w, "\",\n")
 	for _, item := range n.Items {
-		io.WriteString(w, `  (phrase: "`)
-		io.WriteString(w, escapeTypstString(item.Phrase))
-		io.WriteString(w, `", transcription: "`)
-		io.WriteString(w, escapeTypstString(item.Transcription))
-		io.WriteString(w, `", translation: "`)
-		io.WriteString(w, escapeTypstString(item.Translation))
-		io.WriteString(w, "\"),\n")
+		switch item.Kind {
+		case ItemHeader:
+			io.WriteString(w, `  (kind: "header", level: `)
+			io.WriteString(w, strconv.Itoa(item.Level))
+			io.WriteString(w, `, text: "`)
+			io.WriteString(w, escapeTypstString(item.Text))
+			io.WriteString(w, "\"),\n")
+		case ItemNote:
+			io.WriteString(w, `  (kind: "note", text: "`)
+			io.WriteString(w, escapeTypstString(item.Text))
+			io.WriteString(w, "\"),\n")
+		default: // ItemData — unchanged dict shape (ASR-3)
+			io.WriteString(w, `  (phrase: "`)
+			io.WriteString(w, escapeTypstString(item.Phrase))
+			io.WriteString(w, `", transcription: "`)
+			io.WriteString(w, escapeTypstString(item.Transcription))
+			io.WriteString(w, `", translation: "`)
+			io.WriteString(w, escapeTypstString(item.Translation))
+			io.WriteString(w, "\"),\n")
+		}
 	}
 	io.WriteString(w, ")\n\n")
 
@@ -686,11 +738,24 @@ func renderQuestionsTypst(w util.BufWriter, source []byte, node gast.Node, enter
 	io.WriteString(w, escapeTypstString(role))
 	io.WriteString(w, "\",\n")
 	for _, item := range n.Items {
-		io.WriteString(w, `  (question: "`)
-		io.WriteString(w, escapeTypstString(item.Question))
-		io.WriteString(w, `", answer: "`)
-		io.WriteString(w, escapeTypstString(item.Answer))
-		io.WriteString(w, "\"),\n")
+		switch item.Kind {
+		case ItemHeader:
+			io.WriteString(w, `  (kind: "header", level: `)
+			io.WriteString(w, strconv.Itoa(item.Level))
+			io.WriteString(w, `, text: "`)
+			io.WriteString(w, escapeTypstString(item.Text))
+			io.WriteString(w, "\"),\n")
+		case ItemNote:
+			io.WriteString(w, `  (kind: "note", text: "`)
+			io.WriteString(w, escapeTypstString(item.Text))
+			io.WriteString(w, "\"),\n")
+		default: // ItemData — unchanged dict shape (ASR-3)
+			io.WriteString(w, `  (question: "`)
+			io.WriteString(w, escapeTypstString(item.Question))
+			io.WriteString(w, `", answer: "`)
+			io.WriteString(w, escapeTypstString(item.Answer))
+			io.WriteString(w, "\"),\n")
+		}
 	}
 	io.WriteString(w, ")\n\n")
 
