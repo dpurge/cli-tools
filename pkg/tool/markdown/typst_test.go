@@ -387,7 +387,7 @@ func TestToTypst_Dialog_Golden(t *testing.T) {
 			// and #dialog carries dir: rtl + script: "arab".
 			name:  "script=arab: RTL align(right) badge and dialog dir: rtl",
 			input: "{start-dialog script=arab}\n--:\n  مرحبا.\n{end-dialog}\n",
-			want: "#block(above: 1.2em, below: 0.5em, align(right)[#_ctbadge(\"D\")])\n\n" +
+			want: "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"D\")]\n\n" +
 				"#dialog(dir: rtl, script: \"arab\", role: \"source\",\n" +
 				"  (header: \"—\", content: [مرحبا\\.\n\n]),\n" +
 				")\n\n",
@@ -447,7 +447,8 @@ func TestToTypst_Parallel_Golden(t *testing.T) {
 				"===\n" +
 				"Row2 main only.\n" +
 				"{end-parallel}\n",
-			want: "#parallel(source-dir: ltr, script: \"\",\n" +
+			want: "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"P\")]\n\n" +
+				"#parallel(source-dir: ltr, script: \"\",\n" +
 				"  (source: [First para\\.\n\n], translation: [Second para in main\\.\n\n], transcription: [Secondary cell\\.\n\n]),\n" +
 				"  (source: [Row2 main only\\.\n\n], translation: []),\n" +
 				")\n\n",
@@ -461,7 +462,8 @@ func TestToTypst_Parallel_Golden(t *testing.T) {
 				"---\n" +
 				"Secondary.\n" +
 				"{end-parallel}\n",
-			want: "#parallel(source-dir: rtl, script: \"arab\",\n" +
+			want: "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"P\")]\n\n" +
+				"#parallel(source-dir: rtl, script: \"arab\",\n" +
 				"  (source: [Main\\.\n\n], translation: [Secondary\\.\n\n]),\n" +
 				")\n\n",
 		},
@@ -481,7 +483,8 @@ func TestToTypst_Parallel_Golden(t *testing.T) {
 //   - `transcription:` key is genuinely ABSENT (key omission, not empty content)
 func TestToTypst_Parallel_TwoFields(t *testing.T) {
 	input := "{start-parallel script=latn}\nsource text\n---\ntranslation text\n{end-parallel}\n"
-	want := "#parallel(source-dir: ltr, script: \"latn\",\n" +
+	want := "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"P\")]\n\n" +
+		"#parallel(source-dir: ltr, script: \"latn\",\n" +
 		"  (source: [source text\n\n], translation: [translation text\n\n]),\n" +
 		")\n\n"
 
@@ -508,7 +511,8 @@ func TestToTypst_Parallel_TwoFields(t *testing.T) {
 // using the pinned script="latn" resolution at Typst runtime (ASR-6).
 func TestToTypst_Parallel_ThreeFields(t *testing.T) {
 	input := "{start-parallel script=latn}\nsource\n---\ntranslation\n---\ntranscription\n{end-parallel}\n"
-	want := "#parallel(source-dir: ltr, script: \"latn\",\n" +
+	want := "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"P\")]\n\n" +
+		"#parallel(source-dir: ltr, script: \"latn\",\n" +
 		"  (source: [source\n\n], translation: [translation\n\n], transcription: [transcription\n\n]),\n" +
 		")\n\n"
 
@@ -529,7 +533,8 @@ func TestToTypst_Parallel_ThreeFields(t *testing.T) {
 // (the source direction follows the marker, ASR-4). Assert the old param name is absent.
 func TestToTypst_Parallel_RTLSource(t *testing.T) {
 	input := "{start-parallel script=arab}\nsource\n---\ntranslation\n{end-parallel}\n"
-	want := "#parallel(source-dir: rtl, script: \"arab\",\n" +
+	want := "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"P\")]\n\n" +
+		"#parallel(source-dir: rtl, script: \"arab\",\n" +
 		"  (source: [source\n\n], translation: [translation\n\n]),\n" +
 		")\n\n"
 

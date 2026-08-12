@@ -455,3 +455,264 @@ func TestBookTyp_BlockNoteUsesNotesFont(t *testing.T) {
 		t.Errorf("block note applied font = %q, want %q (notes role seeded as NOTESFONT; ASR-5: emph fallback when font.css omits Font Notes)", got, want)
 	}
 }
+
+// --- FR-6 / FR-5 outline-exclusion gate tests ---
+
+// TestBookTyp_TextblockHeadingsNotInOutline is the FR-6 AC-1 compile gate:
+// a heading rendered inside textblock() must have outlined:false — it must
+// NOT appear in the document outline / TOC. A bare document-level heading
+// provides a positive control (outlined:true) so the test detects both
+// wrong-count and wrong-boolean outcomes.
+//
+// Implementation: textblock() now contains `show heading: set heading(outlined:
+// false)` (T4, PLAN.md), scoped to the textblock body so it does NOT affect
+// headings outside the block.
+func TestBookTyp_TextblockHeadingsNotInOutline(t *testing.T) {
+	typstPath, typPath := compileStructuredBlockFixture(t, `
+= Document Heading
+#textblock(role: "source", dir: ltr, script: "latn", [
+== Inner Textblock Heading
+Body text.
+])
+`)
+	// Expect two headings: document heading (outlined:true), textblock heading (outlined:false).
+	out, err := exec.Command(typstPath, "query", typPath, "heading", "--field", "outlined").Output()
+	if err != nil {
+		t.Fatalf("typst query heading outlined: %v", err)
+	}
+	var outlined []bool
+	if err := json.Unmarshal(out, &outlined); err != nil {
+		t.Fatalf("parse typst query output %q: %v", out, err)
+	}
+	if len(outlined) != 2 {
+		t.Fatalf("expected 2 headings (1 document + 1 textblock), got %d: %v", len(outlined), outlined)
+	}
+	if !outlined[0] {
+		t.Errorf("document heading[0].outlined = false, want true (positive control)")
+	}
+	if outlined[1] {
+		t.Errorf("textblock heading[1].outlined = true, want false (FR-6 AC-1: textblock headings must NOT enter the outline)")
+	}
+}
+
+// TestBookTyp_DialogHeaderStillNotInOutlineAfterFR5 is the FR-6 AC-2 regression
+// gate: after the FR-5 change that wrapped _blockheading's output in align(center,
+// heading(...)), dialog headers must still carry outlined:false. The align() wrapper
+// must not inadvertently change the heading's outlined field.
+func TestBookTyp_DialogHeaderStillNotInOutlineAfterFR5(t *testing.T) {
+	typstPath, typPath := compileStructuredBlockFixture(t, `
+= Document Heading
+#dialog(dir: ltr, script: "latn", role: "source",
+  (kind: "header", level: 2, text: "Dialog Section Header"),
+  (header: "—", content: [Content.]),
+)
+`)
+	// Expect two headings: document heading (outlined:true), dialog header (outlined:false).
+	out, err := exec.Command(typstPath, "query", typPath, "heading", "--field", "outlined").Output()
+	if err != nil {
+		t.Fatalf("typst query heading outlined: %v", err)
+	}
+	var outlined []bool
+	if err := json.Unmarshal(out, &outlined); err != nil {
+		t.Fatalf("parse typst query output %q: %v", out, err)
+	}
+	if len(outlined) != 2 {
+		t.Fatalf("expected 2 headings (1 document + 1 dialog header), got %d: %v", len(outlined), outlined)
+	}
+	if !outlined[0] {
+		t.Errorf("document heading[0].outlined = false, want true (positive control)")
+	}
+	if outlined[1] {
+		t.Errorf("dialog header[1].outlined = true, want false (FR-6 AC-2: align() wrap in FR-5 must not change outlined:false)")
+	}
+}
+
+// --- FR-1 heading-size counter gate tests ---
+
+// TestBookTyp_TranscriptionRoleHeadingNotShrunkenByCounter is the FR-1 AC-4
+// compile gate: the heading-size counter
+//
+//	show heading: it => context text(size: 1em / _foreignSizeFactor(script), it)
+//
+// is scoped INSIDE textblock's source-role else branch only. A heading inside a
+// transcription-role block must NOT be affected — those roles do not wrap their
+// body in _foreignSize, so dividing by _foreignSizeFactor there would incorrectly
+// shrink the heading.
+//
+// Setup: base 10pt, _sizeFactor=1.5. Correct transcription H2 = 1.4×10 = 14pt.
+// Mis-scoped: (1.4/1.5)×10 ≈ 9.3pt. Threshold 12pt cleanly separates them.
+func TestBookTyp_TranscriptionRoleHeadingNotShrunkenByCounter(t *testing.T) {
+	// Mirror the book-level heading-level size rules: compileBookTypGateFixture
+	// does not call book(), so these must be seeded explicitly. They are required
+	// to match the thresholds in the comment above (H2 at 1.4em → 14pt correct,
+	// 9.3pt mis-scoped). Without them headings are 1em = ambient, making both
+	// paths resolve to 10pt (indistinguishable and both below 12pt — wrong).
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#show heading.where(level: 1): set text(size: 1.7em)
+#show heading.where(level: 2): set text(size: 1.4em)
+#show heading.where(level: 3): set text(size: 1.2em)
+#set text(size: 10pt)
+#_sizeFactor.update(1.5)
+#textblock(role: "transcription", dir: ltr, script: "arab", [
+== H2 heading #context [#metadata(text.size > 12pt) <tc-h2-size>]
+Body text.
+])
+`)
+	if !typstQueryBool(t, typstPath, typPath, "<tc-h2-size>") {
+		t.Errorf("FR-1 AC-4: transcription-role arab H2 was shrunken by the counter " +
+			"(counter must only fire in source-role else branch; " +
+			"mis-scoped shrinks from ~14pt to ~9.3pt — want >12pt)")
+	}
+}
+
+// TestBookTyp_SourceRoleHeadingLevelsRemainDistinct is the FR-1 AC-5 compile
+// gate: inside a source-role start-text block with an arab script, the
+// heading-size counter normalises the ambient back to the base (undoing the
+// _foreignSize enlargement) so that the book-level per-level size rules
+// (H1=1.7em, H2=1.4em, H3=1.2em) still produce three distinct, correctly
+// ordered sizes.
+//
+// Setup: base 10pt, _sizeFactor=1.5. Expected (counter correct):
+//
+//	H1 = 1.7×10 = 17pt  (> 16pt threshold)
+//	H2 = 1.4×10 = 14pt  (> 13pt threshold)
+//	H3 = 1.2×10 = 12pt  (< 13pt threshold)
+func TestBookTyp_SourceRoleHeadingLevelsRemainDistinct(t *testing.T) {
+	// Mirror the book-level heading-level size rules. The FR-1 counter
+	// (show heading: it => context text(size: 1em/_foreignSizeFactor(script), it))
+	// normalises the ambient back to the base text size. The level-specific
+	// rules then apply their em multiplier on that normalised base:
+	//   _foreignSize ambient (15pt) → counter → 10pt → level rule → 17/14/12pt.
+	// Without these rules all headings resolve to 10pt (counter absorbs _foreignSize);
+	// H1/H2/H3 become indistinguishable and all AC-5 assertions would fail.
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#show heading.where(level: 1): set text(size: 1.7em)
+#show heading.where(level: 2): set text(size: 1.4em)
+#show heading.where(level: 3): set text(size: 1.2em)
+#set text(size: 10pt)
+#_sizeFactor.update(1.5)
+#textblock(role: "source", dir: ltr, script: "arab", [
+= H1 heading #context [#metadata(text.size > 16pt) <src-h1-large>]
+== H2 heading #context [#metadata(text.size > 13pt) <src-h2-medium>]
+=== H3 heading #context [#metadata(text.size < 13pt) <src-h3-small>]
+Body text.
+])
+`)
+	if !typstQueryBool(t, typstPath, typPath, "<src-h1-large>") {
+		t.Errorf("FR-1 AC-5: H1 inside source-role arab textblock not large enough (want >16pt; counter may have homogenised heading levels)")
+	}
+	if !typstQueryBool(t, typstPath, typPath, "<src-h2-medium>") {
+		t.Errorf("FR-1 AC-5: H2 inside source-role arab textblock not medium-sized (want >13pt; H2 must be larger than H3)")
+	}
+	if !typstQueryBool(t, typstPath, typPath, "<src-h3-small>") {
+		t.Errorf("FR-1 AC-5: H3 inside source-role arab textblock not small enough (want <13pt; H3 must be smaller than H2)")
+	}
+}
+
+// --- FR-1 AC-1/AC-2/AC-3 parity and scope gate tests ---
+
+// TestBookTyp_FR1_TextblockDialogHeadingParity covers the three original FR-1
+// acceptance criteria:
+//
+// AC-1 — parity: an Arab-script H2 inside a source-role textblock and an Arab-
+// script (kind:"header") H2 inside dialog both render at the same size. Without
+// the counter the textblock H2 sits at the _foreignSize-enlarged ambient (15pt)
+// and gets Typst's built-in H2 default (1.2em) applied on top: 1.2×15pt = 18pt.
+// With the counter the ambient is normalised back to 10pt before the default
+// fires: 1.2×10pt = 12pt — identical to the dialog H2 which is NOT inside
+// _foreignSize: 1.2×10pt = 12pt.
+//
+// AC-2 — scope: body text inside that same textblock IS still enlarged (15pt);
+// the counter is a show-heading rule and must not affect body text.
+//
+// AC-3 — no-op for non-large scripts: with script="latn",
+// _foreignSizeFactor("latn") = 1.0, so the counter divides by 1.0 = no change.
+// Heading stays at 1.2×10pt = 12pt. If the implementation mistakenly divides by
+// the raw _sizeFactor state value (1.5) instead of _foreignSizeFactor(script),
+// the ambient shrinks from 10pt to 6.67pt and the heading becomes 1.2×6.67 ≈ 8pt.
+//
+// Setup: base 10pt, _sizeFactor=1.5. No book-level heading-size rules are added;
+// Typst's built-in per-level default (1.2em for H2) drives the final size.
+// Thresholds chosen to lie between the correct value and the buggy value:
+//   AC-1/parity: correct=12pt, bug=18pt  → threshold < 15pt
+//   AC-2/body:   correct=15pt            → threshold > 12pt
+//   AC-3/latn:   correct=12pt, bug=~8pt  → threshold > 9pt
+func TestBookTyp_FR1_TextblockDialogHeadingParity(t *testing.T) {
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#set text(size: 10pt)
+#_sizeFactor.update(1.5)
+// AC-1 probe (textblock): heading must be counter-normalised to ~12pt, not the
+// un-countered 18pt (1.2em default × 15pt _foreignSize ambient).
+#textblock(role: "source", dir: rtl, script: "arab", [
+== Arab H2 #context [#metadata(text.size < 15pt) <tb-arab-h2-narrow>]
+Body #context [#metadata(text.size > 12pt) <tb-arab-body-large>]
+])
+// AC-1 probe (dialog): _blockheading is NOT inside _foreignSize so its H2 is
+// always 1.2em × 10pt = 12pt regardless of counter. Parity anchor.
+#dialog(dir: rtl, script: "arab", role: "source",
+  (kind: "header", level: 2, text: [Arab Hdr #context [#metadata(text.size < 15pt) <dlg-arab-h2-narrow>]]),
+  (header: "—", content: [Content.]),
+)
+// AC-3 probe: latn — _foreignSizeFactor("latn")=1.0, counter is 1em/1.0 = no-op.
+// Heading stays at ~12pt (>9pt). Bug (divides by _sizeFactor=1.5): ~8pt (<9pt).
+#textblock(role: "source", dir: ltr, script: "latn", [
+== Latn H2 #context [#metadata(text.size > 9pt) <tb-latn-h2-ok>]
+Body text.
+])
+`)
+	// AC-1: textblock arab H2 counter-normalised — NOT at the enlarged ambient
+	if !typstQueryBool(t, typstPath, typPath, "<tb-arab-h2-narrow>") {
+		t.Errorf("FR-1 AC-1: textblock source arab H2 at enlarged size (want <15pt; " +
+			"missing counter leaves Typst default 1.2em applied on 15pt ambient = 18pt; textblock H2 ≠ dialog H2)")
+	}
+	// AC-1: dialog arab H2 always at base size (parity anchor, unaffected by bug)
+	if !typstQueryBool(t, typstPath, typPath, "<dlg-arab-h2-narrow>") {
+		t.Errorf("FR-1 AC-1: dialog arab H2 header at enlarged size (want <15pt; parity anchor should always be 12pt)")
+	}
+	// AC-2: body text inside textblock IS enlarged by _foreignSize (counter is heading-only)
+	if !typstQueryBool(t, typstPath, typPath, "<tb-arab-body-large>") {
+		t.Errorf("FR-1 AC-2: body text inside source arab textblock not enlarged " +
+			"(want >12pt; counter must be show-heading scoped — body must stay at _foreignSize = 15pt)")
+	}
+	// AC-3: latn heading not shrunken — counter divides by 1.0, not by 1.5
+	if !typstQueryBool(t, typstPath, typPath, "<tb-latn-h2-ok>") {
+		t.Errorf("FR-1 AC-3: latn H2 inside source textblock shrunken " +
+			"(want >9pt; counter must use _foreignSizeFactor(script)=1.0 for latn, not raw _sizeFactor=1.5 giving ~8pt)")
+	}
+}
+
+// --- FR-5 AC-1 centering gate tests ---
+
+// TestBookTyp_FR5_BlockHeaderCentered is the FR-5 AC-1 compile gate:
+// (kind:"header") items inside dialog and vocabulary must produce
+// center-aligned headings. _blockheading() implements this as
+// align(center, heading(...)) — the centering must survive through the
+// heading render pipeline into the final layout.
+//
+// Centering is verified via a #metadata(here().position().x > 100pt) probe
+// placed at the VERY START of the heading body (before any visible text).
+// In Typst's default page (A4, 2.5cm margins = ≈70.87pt each side):
+//   left-aligned start x ≈ 70.87pt → probe returns false (<100pt)
+//   center-aligned start x ≈ (page_width − margin×2 − heading_width)/2 + margin
+//                          ≈ 270pt for a short heading → probe returns true (>>100pt)
+// The 100pt threshold cleanly separates these without requiring exact page metrics.
+func TestBookTyp_FR5_BlockHeaderCentered(t *testing.T) {
+	typstPath, typPath := compileStructuredBlockFixture(t, `
+#dialog(dir: ltr, script: "latn", role: "source",
+  (kind: "header", level: 2, text: [#context [#metadata(here().position().x > 100pt) <dlg-hdr-centered>]Dlg Hdr]),
+  (header: "—", content: [Content.]),
+)
+#vocabulary(script: "latn",
+  (kind: "header", level: 2, text: [#context [#metadata(here().position().x > 100pt) <voc-hdr-centered>]Voc Hdr]),
+  (phrase: "hello", grammar: "", transcription: "", translation: "world"),
+)
+`)
+	if !typstQueryBool(t, typstPath, typPath, "<dlg-hdr-centered>") {
+		t.Errorf("FR-5 AC-1: dialog block header not centered " +
+			"(want here().position().x > 100pt; _blockheading must wrap in align(center,...))")
+	}
+	if !typstQueryBool(t, typstPath, typPath, "<voc-hdr-centered>") {
+		t.Errorf("FR-5 AC-1: vocabulary block header not centered " +
+			"(want here().position().x > 100pt; _blockheading must wrap in align(center,...))")
+	}
+}

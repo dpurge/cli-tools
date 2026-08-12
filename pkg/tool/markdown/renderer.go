@@ -58,7 +58,7 @@ func renderVocabulary(w util.BufWriter, source []byte, node gast.Node, entering 
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, badgeOnlyHTML("V", dir))
+	io.WriteString(w, badgeOnlyHTML("V"))
 	io.WriteString(w, "<div class=\"vocabulary")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, "\" dir=\"")
@@ -114,7 +114,7 @@ func renderDialog(w util.BufWriter, source []byte, node gast.Node, entering bool
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, badgeOnlyHTML("D", dir))
+	io.WriteString(w, badgeOnlyHTML("D"))
 	io.WriteString(w, "<div class=\"dialog")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, asClass(n.As))
@@ -169,6 +169,7 @@ func renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bo
 		return gast.WalkStop, n.Err
 	}
 
+	io.WriteString(w, badgeOnlyHTML("P"))
 	io.WriteString(w, "<div class=\"parallel")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, "\">\n")
@@ -245,7 +246,7 @@ func renderModels(w util.BufWriter, source []byte, node gast.Node, entering bool
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, badgeOnlyHTML("M", dir))
+	io.WriteString(w, badgeOnlyHTML("M"))
 	io.WriteString(w, "<div class=\"models")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, "\" dir=\"")
@@ -344,7 +345,7 @@ func renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering b
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, badgeOnlyHTML("Q", dir))
+	io.WriteString(w, badgeOnlyHTML("Q"))
 	io.WriteString(w, "<div class=\"questions")
 	io.WriteString(w, scriptClass(n.Script))
 	io.WriteString(w, asClass(n.As))
@@ -435,10 +436,9 @@ func renderTextblock(w util.BufWriter, source []byte, node gast.Node, entering b
 	if as == "transcription" {
 		dir = "ltr"
 	}
-	// F-MARK: lift the block's first heading into a "T"-badged title line
-	// (badge injected in place, heading otherwise intact, id preserved); when
-	// the block has no heading, prepend a standalone "T" badge line before the
-	// wrapper.
+	// FR-2/FR-3: always emit the "T" badge as a standalone element before the
+	// wrapper div — never injected into a heading. This keeps the badge out of
+	// any heading element and at the same fixed size as V/D/M/Q/P badges.
 	var body string
 	if n.Raw != "" {
 		content, err := ToHTML([]byte(n.Raw))
@@ -447,10 +447,7 @@ func renderTextblock(w util.BufWriter, source []byte, node gast.Node, entering b
 		}
 		body = string(content)
 	}
-	body, had := injectBadgeIntoFirstHeadingHTML(body, "T")
-	if !had {
-		io.WriteString(w, badgeOnlyHTML("T", dir))
-	}
+	io.WriteString(w, badgeOnlyHTML("T"))
 	io.WriteString(w, "<div class=\"")
 	io.WriteString(w, cls)
 	io.WriteString(w, scriptClass(n.Script))

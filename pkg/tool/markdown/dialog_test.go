@@ -57,11 +57,11 @@ func TestToHTML_Dialog_Golden(t *testing.T) {
 		},
 		{
 			// RTL integration golden: script=arab → blockDirection("arab")="rtl"
-			// → badgeOnlyHTML("D","rtl") emits dir="rtl" on the badge div and
-			// the dialog wrapper carries dir="rtl" + s-arab class (NFR-4).
+			// → the dialog wrapper carries dir="rtl" + s-arab class. The badge
+			// itself is always left-side (FR-2: no dir attribute on the badge div).
 			name:  "script=arab: RTL badge and wrapper",
 			input: "{start-dialog script=arab}\n--:\n  مرحبا.\n{end-dialog}\n",
-			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">D</span></div>\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">D</span></div>\n" +
 				"<div class=\"dialog s-arab\" dir=\"rtl\">\n" +
 				"<div class=\"dialog-item\">\n" +
 				"<div class=\"dialog-header\">—</div>\n" +

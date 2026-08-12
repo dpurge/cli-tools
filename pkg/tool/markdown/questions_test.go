@@ -32,11 +32,11 @@ func TestToHTML_Questions_Golden(t *testing.T) {
 		},
 		{
 			// RTL integration golden: script=arab → blockDirection("arab")="rtl"
-			// → badgeOnlyHTML("Q","rtl") emits dir="rtl" on the badge div and
-			// the questions wrapper carries dir="rtl" + s-arab class (NFR-4).
+			// → the questions wrapper carries dir="rtl" + s-arab class. The badge
+			// itself is always left-side (FR-2: no dir attribute on the badge div).
 			name:  "script=arab: RTL badge and wrapper",
 			input: "{start-questions script=arab}\nما اسمك؟\n{end-questions}\n",
-			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">Q</span></div>\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">Q</span></div>\n" +
 				"<div class=\"questions s-arab\" dir=\"rtl\">\n" +
 				"<div class=\"questions-item\">\n" +
 				"<span class=\"questions-question\">ما اسمك؟</span>\n" +

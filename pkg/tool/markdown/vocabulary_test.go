@@ -64,11 +64,11 @@ func TestToHTML_Vocabulary_Golden(t *testing.T) {
 		},
 		{
 			// RTL integration golden: script=arab → blockDirection("arab")="rtl"
-			// → badgeOnlyHTML("V","rtl") emits dir="rtl" on the badge div and
-			// the vocabulary wrapper carries dir="rtl" + s-arab class (NFR-4).
+			// → the vocabulary wrapper carries dir="rtl" + s-arab class. The badge
+			// itself is always left-side (FR-2: no dir attribute on the badge div).
 			name:  "script=arab: RTL badge and wrapper",
 			input: "{start-vocabulary lang=ar script=arab}\nمرحبا = hello\n{end-vocabulary}\n",
-			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">V</span></div>\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">V</span></div>\n" +
 				"<div class=\"vocabulary s-arab\" dir=\"rtl\">\n" +
 				"<div class=\"vocabulary-item\">\n" +
 				"<span class=\"vocabulary-phrase\">مرحبا</span>\n" +

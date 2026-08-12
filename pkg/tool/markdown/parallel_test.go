@@ -43,7 +43,8 @@ func TestToHTML_Parallel_Golden(t *testing.T) {
 				"---\n" +
 				"Secondary cell.\n" +
 				"{end-parallel}\n",
-			want: "<div class=\"parallel\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+				"<div class=\"parallel\">\n" +
 				"<div class=\"parallel-row\">\n" +
 				"<div class=\"parallel-cell main\">\n" +
 				"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -65,7 +66,8 @@ func TestToHTML_Parallel_Golden(t *testing.T) {
 			input: "{start-parallel}\n" +
 				"Just main cell text.\n" +
 				"{end-parallel}\n",
-			want: "<div class=\"parallel\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+				"<div class=\"parallel\">\n" +
 				"<div class=\"parallel-row\">\n" +
 				"<div class=\"parallel-cell main\">\n" +
 				"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -86,7 +88,8 @@ func TestToHTML_Parallel_Golden(t *testing.T) {
 				"===\n" +
 				"Row2 main only.\n" +
 				"{end-parallel}\n",
-			want: "<div class=\"parallel\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+				"<div class=\"parallel\">\n" +
 				"<div class=\"parallel-row\">\n" +
 				"<div class=\"parallel-cell main\">\n" +
 				"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -115,7 +118,8 @@ func TestToHTML_Parallel_Golden(t *testing.T) {
 				"---\n" +
 				"Secondary text.\n" +
 				"{end-parallel}\n",
-			want: "<div class=\"parallel s-arab\">\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+				"<div class=\"parallel s-arab\">\n" +
 				"<div class=\"parallel-row\">\n" +
 				"<div class=\"parallel-cell main\">\n" +
 				"<div class=\"parallel-source\" dir=\"rtl\">\n" +
@@ -189,7 +193,8 @@ func TestParallel_As_Rejected(t *testing.T) {
 // Evidence: only .parallel-source; no .secondary; no .parallel-transcription.
 func TestParseParallel_OneField(t *testing.T) {
 	input := "{start-parallel}\nsource text\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -218,7 +223,8 @@ func TestParseParallel_OneField(t *testing.T) {
 // SourceRaw="source", TranslationRaw="translation", TranscriptionRaw="".
 func TestParseParallel_TwoFields(t *testing.T) {
 	input := "{start-parallel}\nsource\n---\ntranslation\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -247,7 +253,8 @@ func TestParseParallel_TwoFields(t *testing.T) {
 // populates all three fields (SPECS §3.2, §5.1).
 func TestParseParallel_ThreeFields(t *testing.T) {
 	input := "{start-parallel}\nsource\n---\ntranslation\n---\ntranscription\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -282,7 +289,8 @@ func TestParseParallel_ThreeFields(t *testing.T) {
 // absorbed as authoring content, not treated as an error (§5.2 graceful degradation).
 func TestParseParallel_FourPlusChunksAbsorbed(t *testing.T) {
 	input := "{start-parallel}\na\n---\nb\n---\nc\n---\nd\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -314,7 +322,8 @@ func TestParseParallel_FourPlusChunksAbsorbed(t *testing.T) {
 // TranslationRaw=="" → no .secondary emitted; TranscriptionRaw=="t" → .parallel-transcription IS present.
 func TestParseParallel_EmptyTranslationWithTranscription(t *testing.T) {
 	input := "{start-parallel}\ns\n---\n\n---\nt\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -343,7 +352,8 @@ func TestParseParallel_EmptyTranslationWithTranscription(t *testing.T) {
 // two independent ParallelRows, each rendered in its own .parallel-row.
 func TestParseParallel_MultipleRows(t *testing.T) {
 	input := "{start-parallel}\nRow A\n===\nRow B\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -438,7 +448,8 @@ func TestParseParallel_SourceThematicBreakNowSplits(t *testing.T) {
 // (§6 backward CSS compat): "parallel", "parallel-row", "parallel-cell main".
 func TestRenderParallelHTML_OneField(t *testing.T) {
 	input := "{start-parallel}\nsource text\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -475,7 +486,8 @@ func TestRenderParallelHTML_OneField(t *testing.T) {
 // check per SPECS §12.2 (reviewer-driven correction).
 func TestRenderParallelHTML_TwoFields(t *testing.T) {
 	input := "{start-parallel}\nsource\n---\ntranslation\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -518,7 +530,8 @@ func TestRenderParallelHTML_TwoFields(t *testing.T) {
 // .secondary present with dir ABSENT (ASR-1).
 func TestRenderParallelHTML_ThreeFields(t *testing.T) {
 	input := "{start-parallel}\nsource\n---\ntranslation\n---\ntranscription\n{end-parallel}\n"
-	want := "<div class=\"parallel\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"ltr\">\n" +
@@ -565,7 +578,8 @@ func TestRenderParallelHTML_ThreeFields(t *testing.T) {
 // of the old behavior where script=arab put dir="rtl" on the SECONDARY cell.
 func TestRenderParallelHTML_RTLSource(t *testing.T) {
 	input := "{start-parallel script=arab}\nsource\n---\ntranslation\n{end-parallel}\n"
-	want := "<div class=\"parallel s-arab\">\n" +
+	want := "<div class=\"block-marker\"><span class=\"ct-badge\">P</span></div>\n" +
+		"<div class=\"parallel s-arab\">\n" +
 		"<div class=\"parallel-row\">\n" +
 		"<div class=\"parallel-cell main\">\n" +
 		"<div class=\"parallel-source\" dir=\"rtl\">\n" +

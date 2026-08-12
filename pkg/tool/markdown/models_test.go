@@ -36,11 +36,11 @@ func TestToHTML_Models_Golden(t *testing.T) {
 		},
 		{
 			// RTL integration golden: script=arab → blockDirection("arab")="rtl"
-			// → badgeOnlyHTML("M","rtl") emits dir="rtl" on the badge div and
-			// the models wrapper carries dir="rtl" + s-arab class (NFR-4).
+			// → the models wrapper carries dir="rtl" + s-arab class. The badge
+			// itself is always left-side (FR-2: no dir attribute on the badge div).
 			name:  "script=arab: RTL badge and wrapper",
 			input: "{start-models script=arab}\nمرحبا\n{end-models}\n",
-			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">M</span></div>\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">M</span></div>\n" +
 				"<div class=\"models s-arab\" dir=\"rtl\">\n" +
 				"<div class=\"models-item\">\n" +
 				"<span class=\"models-phrase\">مرحبا</span>\n" +

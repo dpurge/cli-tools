@@ -465,7 +465,7 @@ func renderVocabularyTypst(w util.BufWriter, source []byte, node gast.Node, ente
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, badgeOnlyTypst("V", dir))
+	io.WriteString(w, badgeOnlyTypst("V"))
 	io.WriteString(w, "#vocabulary(dir: ")
 	io.WriteString(w, dir)
 	io.WriteString(w, `, script: "`)
@@ -521,7 +521,7 @@ func renderDialogTypst(w util.BufWriter, source []byte, node gast.Node, entering
 	if role == "" {
 		role = "source"
 	}
-	io.WriteString(w, badgeOnlyTypst("D", dir))
+	io.WriteString(w, badgeOnlyTypst("D"))
 	io.WriteString(w, "#dialog(dir: ")
 	io.WriteString(w, dir)
 	io.WriteString(w, `, script: "`)
@@ -574,6 +574,7 @@ func renderParallelTypst(w util.BufWriter, source []byte, node gast.Node, enteri
 	}
 
 	sourceDir := blockDirection(n.Script)
+	io.WriteString(w, badgeOnlyTypst("P"))
 	io.WriteString(w, "#parallel(source-dir: ")
 	io.WriteString(w, sourceDir)
 	io.WriteString(w, `, script: "`)
@@ -626,7 +627,7 @@ func renderModelsTypst(w util.BufWriter, source []byte, node gast.Node, entering
 	}
 
 	dir := blockDirection(n.Script)
-	io.WriteString(w, badgeOnlyTypst("M", dir))
+	io.WriteString(w, badgeOnlyTypst("M"))
 	io.WriteString(w, "#models(dir: ")
 	io.WriteString(w, dir)
 	io.WriteString(w, `, script: "`)
@@ -682,9 +683,9 @@ func renderTextblockTypst(w util.BufWriter, source []byte, node gast.Node, enter
 	if as == "transcription" {
 		dir = "ltr"
 	}
-	// F-MARK: lift the block's first heading into a "T"-badged title line
-	// (badge injected in place, heading otherwise intact); when the block has
-	// no heading, prepend a standalone "T" badge line before the wrapper.
+	// FR-2/FR-3: always emit the "T" badge as a standalone element before the
+	// #textblock(...) call — never injected into a heading. This keeps the badge
+	// out of the PDF outline() and at the same fixed size as V/D/M/Q/P badges.
 	var body string
 	if n.Raw != "" {
 		content, err := ToTypst([]byte(n.Raw))
@@ -693,10 +694,7 @@ func renderTextblockTypst(w util.BufWriter, source []byte, node gast.Node, enter
 		}
 		body = string(content)
 	}
-	body, had := injectBadgeIntoFirstHeadingTypst(body, "T")
-	if !had {
-		io.WriteString(w, badgeOnlyTypst("T", dir))
-	}
+	io.WriteString(w, badgeOnlyTypst("T"))
 	io.WriteString(w, "#textblock(role: \"")
 	io.WriteString(w, as)
 	io.WriteString(w, "\", dir: ")
@@ -729,7 +727,7 @@ func renderQuestionsTypst(w util.BufWriter, source []byte, node gast.Node, enter
 	if role == "" {
 		role = "source"
 	}
-	io.WriteString(w, badgeOnlyTypst("Q", dir))
+	io.WriteString(w, badgeOnlyTypst("Q"))
 	io.WriteString(w, "#questions(dir: ")
 	io.WriteString(w, dir)
 	io.WriteString(w, `, script: "`)

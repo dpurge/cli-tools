@@ -48,7 +48,12 @@
 // enlargement / no regression), else size-large/size (≈1.33). Reads state, so
 // callers MUST be inside a `context` expression (mirrors _resolveFont, above).
 #let _sizeFactor = state("size-factor", 1.0)
-#let _foreignSize(script) = if _isLargeScript(script) { _sizeFactor.get() * 1em } else { 1em }
+// _foreignSizeFactor returns the bare numeric enlargement factor for a script
+// (reads _sizeFactor state, so callers MUST be inside a `context` expression).
+// Used by _foreignSize AND by the FR-1 heading counter (textblock else branch)
+// to divide out the ambient enlargement from headings.
+#let _foreignSizeFactor(script) = if _isLargeScript(script) { _sizeFactor.get() } else { 1.0 }
+#let _foreignSize(script) = _foreignSizeFactor(script) * 1em
 
 // SPECS F-MARK: the content-type badge — a filled black square with a knockout
 // white letter (T/V/D/M/Q). The letter's font is PINNED to the header (Latin)
@@ -160,10 +165,18 @@
 // emphFont when font.css declares no Font Notes). No large-script gate:
 // text(font:) is called directly, bypassing book()'s strong/emph
 // interceptors (SPECS §7.2, D3).
-#let _blockheading(level, body) = heading(level: level, outlined: false)[#body]
+// FR-5: center all structured-block headers (dialog/vocabulary/models/questions).
+// FR-6 (start-dialog): outlined: false already keeps these out of the TOC;
+// the align() wrapper does not disturb the outlined field (verified by compile).
+#let _blockheading(level, body) = align(center, heading(level: level, outlined: false)[#body])
 #let _blocknote(body) = align(center, context text(font: _roleFonts.get().notes)[#body])
 
 #let textblock(role: "source", dir: ltr, script: "", body) = {
+  // FR-6: exclude ALL headings inside a start-text block from the outline(),
+  // mirroring _blockheading's outlined: false (start-dialog, etc.). Raw markdown
+  // headings inside textblock() emit plain Typst `= ...` syntax, which defaults
+  // to outlined: true; this rule overrides that for every heading in this scope.
+  show heading: set heading(outlined: false)
   show heading.where(level: 1): set align(center)
   show heading.where(level: 2): set align(center)
   show heading.where(level: 3): set align(center)
@@ -219,6 +232,19 @@
   } else if role == "translation" {
     context text(font: _resolveFont(script: "", ext: "text", field: "translation"), body)
   } else {
+    // FR-1: the entire else-branch body is wrapped in context text(size:
+    // _foreignSize(script), ...) below, which enlarges an Arabic/CJK/etc. ambient
+    // em. A raw markdown H2 inside that scope resolves its `1.4em` level-2 size
+    // against the already-enlarged em — rendering too large vs. a _blockheading
+    // H2 (which is outside any _foreignSize scope). This show rule divides out the
+    // factor for headings only, restoring parity with _blockheading headers.
+    // - Must use the function form (it => context ...) because _foreignSizeFactor
+    //   reads _sizeFactor state, which requires a context (bare `set text(size:)`
+    //   form fails to compile: "can only be used when context is known").
+    // - Must be scoped here (inside the else block), NOT at function top: the
+    //   grammar/transcription/translation branches above NEVER apply _foreignSize,
+    //   so a function-wide rule would incorrectly shrink their headings.
+    show heading: it => context text(size: 1em / _foreignSizeFactor(script), it)
     context text(font: _resolveFont(script: script, ext: "text", field: "source"), size: _foreignSize(script), body)
   }
 }

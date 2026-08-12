@@ -28,7 +28,7 @@ func TestToHTML_Text_Golden(t *testing.T) {
 		{
 			name:  "source RTL script (arab) → class text dir rtl",
 			input: "{start-text as=source script=arab}\nمرحبا\n{end-text}\n",
-			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">T</span></div>\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">T</span></div>\n" +
 				"<div class=\"text s-arab\" dir=\"rtl\">\n" +
 				"<p>مرحبا</p>\n" +
 				"</div>\n",
@@ -52,7 +52,7 @@ func TestToHTML_Text_Golden(t *testing.T) {
 		{
 			name:  "translation RTL script (arab) → class translation dir rtl (D9)",
 			input: "{start-text as=translation script=arab}\nترجمة\n{end-text}\n",
-			want: "<div class=\"block-marker\" dir=\"rtl\"><span class=\"ct-badge\">T</span></div>\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">T</span></div>\n" +
 				"<div class=\"translation s-arab as-translation\" dir=\"rtl\">\n" +
 				"<p>ترجمة</p>\n" +
 				"</div>\n",
@@ -74,10 +74,14 @@ func TestToHTML_Text_Golden(t *testing.T) {
 				"</div>\n",
 		},
 		{
+			// FR-2/FR-3: badge is now standalone before the wrapper; the heading
+			// is plain goldmark HTML (no badge injected into it). The badge is
+			// always emitted regardless of whether the body contains a heading.
 			name:  "heading inside source block is recursed through ToHTML",
 			input: "{start-text as=source}\n# Section Title\n\nBody text.\n{end-text}\n",
-			want: "<div class=\"text\" dir=\"ltr\">\n" +
-				"<h1 id=\"section-title\" class=\"block-title\"><span class=\"ct-badge\">T</span>Section Title</h1>\n" +
+			want: "<div class=\"block-marker\"><span class=\"ct-badge\">T</span></div>\n" +
+				"<div class=\"text\" dir=\"ltr\">\n" +
+				"<h1 id=\"section-title\">Section Title</h1>\n" +
 				"<p>Body text.</p>\n" +
 				"</div>\n",
 		},
@@ -127,9 +131,10 @@ func TestToTypst_Text_Golden(t *testing.T) {
 			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"source\", dir: ltr, script: \"latn\", [\nHello world\\.\n\n])\n\n",
 		},
 		{
+			// FR-2: badge always left-side — no align(right) even for RTL script.
 			name:  "source RTL script (arab) → role source dir rtl",
 			input: "{start-text as=source script=arab}\nمرحبا\n{end-text}\n",
-			want:  "#block(above: 1.2em, below: 0.5em, align(right)[#_ctbadge(\"T\")])\n\n#textblock(role: \"source\", dir: rtl, script: \"arab\", [\nمرحبا\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"source\", dir: rtl, script: \"arab\", [\nمرحبا\n\n])\n\n",
 		},
 		{
 			name:  "transcription always ltr (pinned romanization, D9)",
@@ -142,9 +147,10 @@ func TestToTypst_Text_Golden(t *testing.T) {
 			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"translation\", dir: ltr, script: \"latn\", [\nHello in Latin\\.\n\n])\n\n",
 		},
 		{
+			// FR-2: badge always left-side — no align(right) even for RTL script.
 			name:  "translation RTL script (arab) → dir rtl (D9)",
 			input: "{start-text as=translation script=arab}\nترجمة\n{end-text}\n",
-			want:  "#block(above: 1.2em, below: 0.5em, align(right)[#_ctbadge(\"T\")])\n\n#textblock(role: \"translation\", dir: rtl, script: \"arab\", [\nترجمة\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"translation\", dir: rtl, script: \"arab\", [\nترجمة\n\n])\n\n",
 		},
 		{
 			name:  "grammar LTR script (latn) → dir ltr",
@@ -157,9 +163,11 @@ func TestToTypst_Text_Golden(t *testing.T) {
 			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"source\", dir: ltr, script: \"\", [\nDefault direction\\.\n\n])\n\n",
 		},
 		{
+			// FR-2/FR-3: badge emitted standalone before #textblock; heading inside
+			// the body is plain Typst (no badge injected into the heading text).
 			name:  "heading inside source block is recursed via ToTypst",
 			input: "{start-text as=source script=latn}\n# Section\n\nBody.\n{end-text}\n",
-			want:  "#textblock(role: \"source\", dir: ltr, script: \"latn\", [\n= #_ctbadge(\"T\") Section\n\nBody\\.\n\n])\n\n",
+			want:  "#block(above: 1.2em, below: 0.5em)[#_ctbadge(\"T\")]\n\n#textblock(role: \"source\", dir: ltr, script: \"latn\", [\n= Section\n\nBody\\.\n\n])\n\n",
 		},
 		{
 			// Grammar tables are emitted with integer columns so that book.typ's

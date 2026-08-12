@@ -109,8 +109,10 @@ func assembleTypstDocument(project *EBookProject, lang, dir, cover string, bodie
 	if largeScript(project.Script) {
 		doc.WriteString("  large-script: true,\n")
 	}
-	if project.ContentsTitle != "" {
-		doc.WriteString("  contents-title: " + typstStringLiteral(project.ContentsTitle) + ",\n")
+	// FR-7: explicit per-book override wins; catalog lookup provides a language-
+	// specific default; empty result leaves book.typ's [Contents] default in place.
+	if ct := resolveContentsTitle(project.ContentsTitle, lang); ct != "" {
+		doc.WriteString("  contents-title: " + typstStringLiteral(ct) + ",\n")
 	}
 	if cover != "" {
 		doc.WriteString("  cover: " + typstStringLiteral(cover) + ",\n")

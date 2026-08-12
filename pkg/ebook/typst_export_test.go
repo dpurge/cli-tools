@@ -876,10 +876,15 @@ func TestBookTemplateContentsTitle(t *testing.T) {
 	}
 }
 
-// TestAssembleTypstDocumentContentsTitle covers bug #4 end to end: when
-// ContentsTitle is set, the exporter emits contents-title as a quoted string
-// literal; when unset, it is omitted so book.typ's default "Contents" stands.
+// TestAssembleTypstDocumentContentsTitle covers bug #4 end to end (FR-7):
+//   - explicit ContentsTitle override always wins and is emitted verbatim;
+//   - when ContentsTitle is unset and lang is in the catalog ("en"), the catalog
+//     entry ("Contents") is emitted — FR-7 AC-2;
+//   - when ContentsTitle is unset and lang is absent from the catalog, no
+//     contents-title: argument is emitted so book.typ's [Contents] default stands
+//     — FR-7 AC-3.
 func TestAssembleTypstDocumentContentsTitle(t *testing.T) {
+	// Case 1: explicit override wins (FR-7 AC-1).
 	set, err := assembleTypstDocument(
 		&EBookProject{Title: "T", ContentsTitle: "Spis treści"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
 	if err != nil {
@@ -890,12 +895,27 @@ func TestAssembleTypstDocumentContentsTitle(t *testing.T) {
 		t.Errorf("expected %q in call when ContentsTitle is set, got:\n%s", wantSet, showCall(set))
 	}
 
-	unset, err := assembleTypstDocument(
+	// Case 2: unset ContentsTitle with a catalogued language ("en") → catalog entry
+	// "Contents" is emitted (FR-7 AC-2). Pre-fix this was omitted; post-fix it is
+	// resolved via resolveContentsTitle("", "en") → bookStrings["en"].Contents.
+	catalogHit, err := assembleTypstDocument(
 		&EBookProject{Title: "T"}, "en", "ltr", "", []string{"body"}, config.PdfConfig{})
 	if err != nil {
-		t.Fatalf("assembleTypstDocument(ContentsTitle unset) error = %v", err)
+		t.Fatalf("assembleTypstDocument(catalog hit) error = %v", err)
 	}
-	if strings.Contains(showCall(unset), "contents-title:") {
-		t.Errorf("must not emit contents-title: when ContentsTitle is unset, got:\n%s", showCall(unset))
+	wantCatalog := `contents-title: "Contents"`
+	if !strings.Contains(showCall(catalogHit), wantCatalog) {
+		t.Errorf("expected %q for lang=en (catalog hit), got:\n%s", wantCatalog, showCall(catalogHit))
+	}
+
+	// Case 3: unset ContentsTitle with a lang NOT in the catalog → no emission,
+	// book.typ's built-in [Contents] default stands (FR-7 AC-3).
+	catalogMiss, err := assembleTypstDocument(
+		&EBookProject{Title: "T"}, "xx-invented", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument(catalog miss) error = %v", err)
+	}
+	if strings.Contains(showCall(catalogMiss), "contents-title:") {
+		t.Errorf("must not emit contents-title: for lang=xx-invented (catalog miss), got:\n%s", showCall(catalogMiss))
 	}
 }
