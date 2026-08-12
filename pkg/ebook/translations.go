@@ -35,6 +35,7 @@ var bookStrings = map[string]bookStringSet{
 	// "ar": {Contents: "المحتويات"}, // please verify before enabling
 	// "fr": {Contents: "Sommaire"},  // please verify before enabling
 	// "de": {Contents: "Inhalt"},    // please verify before enabling
+	"pl": {Contents: "Spis treści"},
 }
 
 // resolveContentsTitle returns the string to emit as contents-title in the
