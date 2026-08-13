@@ -54,6 +54,13 @@
 // to divide out the ambient enlargement from headings.
 #let _foreignSizeFactor(script) = if _isLargeScript(script) { _sizeFactor.get() } else { 1.0 }
 #let _foreignSize(script) = _foreignSizeFactor(script) * 1em
+// _baseSizeFactor holds the ratio that returns the document-ambient text size
+// to the book's base `size` when the book is a large-script book (where the
+// ambient is size-large). Set by book() to size/size-large when large-script is
+// true, else 1.0 (no-op). Reads state, so callers MUST be inside a `context`
+// expression (same convention as _foreignSizeFactor above).
+#let _baseSizeFactor = state("base-size-factor", 1.0)
+#let _baseSize() = _baseSizeFactor.get() * 1em
 
 // SPECS F-MARK: the content-type badge — a filled black square with a knockout
 // white letter (T/V/D/M/Q). The letter's font is PINNED to the header (Latin)
@@ -230,7 +237,7 @@
   } else if role == "transcription" {
     context text(font: _resolveFont(script: "latn", ext: "text", field: "transcription"), body)
   } else if role == "translation" {
-    context text(font: _resolveFont(script: "", ext: "text", field: "translation"), body)
+    context text(font: _resolveFont(script: "", ext: "text", field: "translation"), size: _baseSize(), body)
   } else {
     // FR-1: the entire else-branch body is wrapped in context text(size:
     // _foreignSize(script), ...) below, which enlarges an Arabic/CJK/etc. ambient
@@ -295,7 +302,7 @@
             [ ]; emph[#context text(font: _resolveFont(script: "latn", ext: "vocabulary", field: "transcription"), dir: ltr)[\[#it.at("transcription")\]]]
           }
         },
-        context text(font: _resolveFont(script: "", ext: "vocabulary", field: "translation"), dir: ltr)[#it.at("translation", default: "")],
+        context text(font: _resolveFont(script: "", ext: "vocabulary", field: "translation"), dir: ltr, size: _baseSize())[#it.at("translation", default: "")],
       )
     }
   }
@@ -366,7 +373,7 @@
             }
           },
           if translation != "" {
-            context text(font: _resolveFont(script: "", ext: "models", field: "translation"), dir: ltr)[#translation]
+            context text(font: _resolveFont(script: "", ext: "models", field: "translation"), dir: ltr, size: _baseSize())[#translation]
           } else if transcription != "" {
             emph[#context text(font: _resolveFont(script: "latn", ext: "models", field: "transcription"), dir: ltr)[\[#transcription\]]]
           } else { [] },
@@ -416,15 +423,15 @@
       let answer = it.at("answer", default: "")
       if answer != "" {
         run += (
-          context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: _foreignSize(familyScript), question),
-          context text(font: _resolveFont(script: familyScript, ext: "questions", field: "answer", as-translation: asTranslation), size: _foreignSize(familyScript), answer),
+          context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: if asTranslation { _baseSize() } else { _foreignSize(familyScript) }, question),
+          context text(font: _resolveFont(script: familyScript, ext: "questions", field: "answer", as-translation: asTranslation), size: if asTranslation { _baseSize() } else { _foreignSize(familyScript) }, answer),
         )
       } else {
         if run.len() > 0 {
           grid(columns: (auto, 1fr), column-gutter: 1em, row-gutter: 0.5em, align: (start + top, start + top), ..run)
           run = ()
         }
-        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: _foreignSize(familyScript), question)
+        context text(font: _resolveFont(script: familyScript, ext: "questions", field: "question", as-translation: asTranslation), size: if asTranslation { _baseSize() } else { _foreignSize(familyScript) }, question)
         parbreak()
       }
     }
@@ -490,9 +497,9 @@
         if _isLargeScript(familyScript) {
           context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "header", style: "strong", as-translation: asTranslation), weight: "regular", size: _foreignSize(familyScript), t.at("header", default: ""))
         } else {
-          text(weight: "bold", t.at("header", default: ""))
+          context text(size: if asTranslation { _baseSize() } else { 1em }, weight: "bold", t.at("header", default: ""))
         },
-        context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", as-translation: asTranslation), size: _foreignSize(familyScript))[#t.at("content", default: [])],
+        context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", as-translation: asTranslation), size: if asTranslation { _baseSize() } else { _foreignSize(familyScript) })[#t.at("content", default: [])],
       )
     }
   }
@@ -560,7 +567,7 @@
       // TRANSLATION — no scoped gate; bold/emph falls through to book()'s
       // book-level large-script gate (deliberately absent, not a separate
       // mechanism). No dir: override — inherits book ambient direction.
-      context text(font: _resolveFont(script: "", ext: "parallel", field: "translation"))[#r.at("translation", default: [])],
+      context text(font: _resolveFont(script: "", ext: "parallel", field: "translation"), size: _baseSize())[#r.at("translation", default: [])],
     )).flatten()
   ))
 }
@@ -608,6 +615,10 @@
   // 1.0 keeps a whole-book large-script book unchanged (its base is already
   // size-large); otherwise foreign runs scale by size-large/size (SPECS FR-2).
   _sizeFactor.update(if large-script { 1.0 } else { size-large / size })
+  // Inverse ratio: divides the enlarged ambient back to base `size` for
+  // translation-role fields in a large-script book. 1.0 when not large-script
+  // (ambient is already `size`, no adjustment needed).
+  _baseSizeFactor.update(if large-script { size / size-large } else { 1.0 })
 
   set document(title: title, author: if author == none or author == "" { () } else { author })
   set text(

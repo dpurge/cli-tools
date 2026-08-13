@@ -716,3 +716,116 @@ func TestBookTyp_FR5_BlockHeaderCentered(t *testing.T) {
 			"(want here().position().x > 100pt; _blockheading must wrap in align(center,...))")
 	}
 }
+
+// --- FR-2 translation-field base-size gate tests (SPECS FR-2 AC-1/AC-2/AC-5) -
+
+// compileBookTypRealBookFixture writes bookTemplate + body to a temp .typ
+// file and compiles it with the real typst binary. Unlike
+// compileBookTypGateFixture, this does NOT prepend bookTypGateFixtureHeader
+// (no synthetic fonts, no manual state seeding). The body is expected to
+// include a #show: book.with(...) invocation so book()'s own state-seeding —
+// including _baseSizeFactor.update() — runs exactly as it does in production.
+// Skips cleanly when no typst binary is available, matching every other
+// real-typst test in this package. Returns the resolved typst binary path and
+// the fixture .typ path, ready for typst query.
+func compileBookTypRealBookFixture(t *testing.T, body string) (typstPath, typPath string) {
+	t.Helper()
+	typstPath, err := locateTypst()
+	if err != nil {
+		t.Skipf("typst binary not available: %v", err)
+	}
+
+	dir := t.TempDir()
+	typPath = filepath.Join(dir, "fixture.typ")
+	pdfPath := filepath.Join(dir, "fixture.pdf")
+	src := bookTemplate + "\n" + body + "\n"
+	if err := os.WriteFile(typPath, []byte(src), 0o644); err != nil {
+		t.Fatalf("write fixture: %v", err)
+	}
+
+	if out, err := runTypst(typstPath, "compile", typPath, pdfPath); err != nil {
+		t.Fatalf("typst compile failed: %s", out)
+	}
+	return typstPath, typPath
+}
+
+// TestBookTyp_FR2_TranslationFieldsNotEnlargedInLargeScriptBook is the FR-2
+// AC-1 / AC-2 / AC-5 regression test: in a large-script book
+// (large-script:true, size:12pt, size-large:16pt), every translation-role /
+// as=translation field must render at the book's BASE `size` (12pt), not the
+// enlarged ambient `size-large` (16pt).
+//
+// This test calls the REAL book() wrapper (not a manually-seeded _sizeFactor
+// state) so that _baseSizeFactor.update(size/size-large) runs exactly as in
+// production — matching the exact start-models script=arab scenario reported
+// in FR-2 AC-5 (NFR-2: compile-verified, not a golden-string test).
+//
+// Threshold: text.size < 14pt is true at 12pt (correct, base), false at 16pt
+// (buggy, enlarged ambient). Each block type gets its own unique label so
+// failures are individually diagnosed.
+//
+// Arithmetic (all inside a context expression when book() is in effect):
+//
+//	_baseSizeFactor = size/size-large = 12pt/16pt = 0.75
+//	ambient text size = size-large = 16pt  (set by book())
+//	_baseSize() = 0.75 * 1em = 0.75 * 16pt = 12pt  → text.size < 14pt = true ✓
+//	without fix: _foreignSize("") = 1.0 * 1em = 16pt → text.size < 14pt = false ✗
+func TestBookTyp_FR2_TranslationFieldsNotEnlargedInLargeScriptBook(t *testing.T) {
+	typstPath, typPath := compileBookTypRealBookFixture(t, `
+#show: book.with(
+  title: "FR-2 size test",
+  large-script: true,
+  size: 12pt,
+  size-large: 16pt,
+)
+
+// models() translation field — the reported start-models script=arab case (FR-2 AC-5)
+#models(script: "arab",
+  (phrase: [P], transcription: "", translation: [T#context [#metadata(text.size < 14pt) <fr2-models-trans>]]),
+)
+
+// textblock(role:"translation") (FR-2 AC-2)
+#textblock(role: "translation", dir: ltr, script: "arab", [T#context [#metadata(text.size < 14pt) <fr2-textblock-trans>]])
+
+// vocabulary() translation cell (FR-2 AC-2)
+#vocabulary(script: "arab",
+  (phrase: [P], grammar: "", transcription: "", translation: [T#context [#metadata(text.size < 14pt) <fr2-vocab-trans>]]),
+)
+
+// parallel() translation column (FR-2 AC-2)
+#parallel(script: "arab", (
+  source: [Source.],
+  translation: [T#context [#metadata(text.size < 14pt) <fr2-parallel-trans>]],
+),)
+
+// dialog(role:"translation") header+content — non-large familyScript branch (FR-2 AC-2)
+#dialog(script: "arab", role: "translation",
+  (header: [H#context [#metadata(text.size < 14pt) <fr2-dialog-header>]], content: [C#context [#metadata(text.size < 14pt) <fr2-dialog-trans>]]),
+)
+
+// questions(role:"translation") solo-question path (FR-2 AC-2)
+#questions(script: "arab", role: "translation",
+  (question: [Q#context [#metadata(text.size < 14pt) <fr2-questions-trans>]], answer: ""),
+)
+`)
+
+	for _, tc := range []struct {
+		label string
+		field string
+	}{
+		{"<fr2-models-trans>", "models() translation — the reported start-models script=arab case (FR-2 AC-5)"},
+		{"<fr2-textblock-trans>", "textblock(role:translation) body (FR-2 AC-2)"},
+		{"<fr2-vocab-trans>", "vocabulary() translation cell (FR-2 AC-2)"},
+		{"<fr2-parallel-trans>", "parallel() translation column (FR-2 AC-2)"},
+		{"<fr2-dialog-header>", "dialog(role:translation) header (FR-2 AC-2)"},
+		{"<fr2-dialog-trans>", "dialog(role:translation) content (FR-2 AC-2)"},
+		{"<fr2-questions-trans>", "questions(role:translation) solo question (FR-2 AC-2)"},
+	} {
+		if !typstQueryBool(t, typstPath, typPath, tc.label) {
+			t.Errorf("FR-2: %s was NOT at base size "+
+				"(want text.size < 14pt = true at 12pt base; "+
+				"false means 16pt enlarged ambient leaked through — _baseSize() not applied)",
+				tc.field)
+		}
+	}
+}

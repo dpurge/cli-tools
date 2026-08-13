@@ -20,10 +20,11 @@ func buildVocabulary(projectfile string) (string, error) {
 		return "", err
 	}
 
-	outfile := project.Filename
-	if strings.HasSuffix(outfile, ".epub") {
-		outfile = strings.TrimSuffix(outfile, ".epub") + ".csv"
-	}
+	// baseOutputName strips any existing extension (".epub" or otherwise) so
+	// this derives correctly whether Filename is extensionless or not; see
+	// TestBaseOutputName's "other-extension" case in exporter_test.go for the
+	// coverage of this derivation (no separate buildVocabulary test needed).
+	outfile := baseOutputName(project.Filename) + ".csv"
 
 	f, err := os.Create(outfile)
 	if err != nil {

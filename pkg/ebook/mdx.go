@@ -75,13 +75,7 @@ func countSections(items []ProjectItem) int {
 // filepath.Ext) and append "-mdx", e.g.
 // ".../turkish-notes-private.epub" -> ".../turkish-notes-private-mdx".
 func derivedMdxDir(epubFilename string) string {
-	base := epubFilename
-	if strings.HasSuffix(base, ".epub") {
-		base = strings.TrimSuffix(base, ".epub")
-	} else {
-		base = strings.TrimSuffix(base, filepath.Ext(base))
-	}
-	return base + "-mdx"
+	return baseOutputName(epubFilename) + "-mdx"
 }
 
 // mdxCategoryLink is the "link" object of a Docusaurus "_category_.json"

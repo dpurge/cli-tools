@@ -1,5 +1,22 @@
 package ebook
 
+import (
+	"path/filepath"
+	"strings"
+)
+
+// baseOutputName strips the extension from a project Filename to obtain a
+// base path suitable for appending any output extension. If the filename ends
+// in ".epub" that suffix is stripped; for any other extension the generic
+// filepath.Ext suffix is stripped. This is the single shared derivation used
+// by all exporters — EPUB, PDF/Typst, MDX, and vocabulary CSV.
+func baseOutputName(filename string) string {
+	if strings.HasSuffix(filename, ".epub") {
+		return strings.TrimSuffix(filename, ".epub")
+	}
+	return strings.TrimSuffix(filename, filepath.Ext(filename))
+}
+
 // Exporter builds one output artifact (EPUB, PDF, ...) from an already
 // loaded EBookProject. Each output format (epubExporter, typstExporter)
 // implements this interface so build-cmd.go can read the project once and
@@ -122,6 +139,8 @@ func languageInfo(language, script string) (lang, dir string) {
 		lang = "mn"
 	case "nld":
 		lang = "nl"
+	case "pol":
+		lang = "pl"
 	case "ron":
 		lang = "ro"
 	case "spa":

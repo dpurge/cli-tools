@@ -642,12 +642,7 @@ func typstStringLiteral(s string) string {
 // derivedTypstPaths derives the output PDF and generated .typ paths from the
 // EPUB filename, placing both next to the EPUB (SPECS §8.4/D7).
 func derivedTypstPaths(epubFilename string) (pdfPath, typPath string) {
-	base := epubFilename
-	if strings.HasSuffix(base, ".epub") {
-		base = strings.TrimSuffix(base, ".epub")
-	} else {
-		base = strings.TrimSuffix(base, filepath.Ext(base))
-	}
+	base := baseOutputName(epubFilename)
 	return base + ".pdf", base + ".typ"
 }
 

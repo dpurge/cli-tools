@@ -425,3 +425,43 @@ func TestSectionSlug(t *testing.T) {
 		}
 	}
 }
+
+// --- extensionless filename: mdxExporter output dir (FR-1 AC-2, FR-2 AC-3) --
+
+// TestMdxExporterExtensionlessFilename asserts that Filename without a .epub
+// extension produces the same "-mdx" output directory name as the equivalent
+// .epub-suffixed Filename (FR-1 AC-2, FR-2 AC-3). Each export runs in its
+// own t.TempDir to prevent output-directory collision between the two calls.
+func TestMdxExporterExtensionlessFilename(t *testing.T) {
+	buildProject := func(dir, filename string) *EBookProject {
+		return &EBookProject{
+			Filename: filename,
+			Language: "lat",
+			Script:   "latn",
+			Text: [][]string{{
+				writeFixture(t, dir, "section.md", "# Section\n\nIntro.\n"),
+				writeFixture(t, dir, "ch.md", "# Chapter\n\nBody.\n"),
+			}},
+		}
+	}
+
+	// --- extensionless Filename → <name>-mdx ------------------------------------
+	dir1 := t.TempDir()
+	outDir1, err := (mdxExporter{}).Export(buildProject(dir1, filepath.Join(dir1, "book")))
+	if err != nil {
+		t.Fatalf("Export(extensionless) error = %v", err)
+	}
+	if filepath.Base(outDir1) != "book-mdx" {
+		t.Errorf("Export(extensionless) dir base = %q, want %q", filepath.Base(outDir1), "book-mdx")
+	}
+
+	// --- .epub-suffixed Filename → identical directory name (regression guard) --
+	dir2 := t.TempDir()
+	outDir2, err := (mdxExporter{}).Export(buildProject(dir2, filepath.Join(dir2, "book.epub")))
+	if err != nil {
+		t.Fatalf("Export(.epub-suffixed) error = %v", err)
+	}
+	if filepath.Base(outDir2) != filepath.Base(outDir1) {
+		t.Errorf("Export(.epub-suffixed) dir base = %q, want %q (same as extensionless)", filepath.Base(outDir2), filepath.Base(outDir1))
+	}
+}

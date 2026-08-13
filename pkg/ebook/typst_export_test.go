@@ -918,4 +918,118 @@ func TestAssembleTypstDocumentContentsTitle(t *testing.T) {
 	if strings.Contains(showCall(catalogMiss), "contents-title:") {
 		t.Errorf("must not emit contents-title: for lang=xx-invented (catalog miss), got:\n%s", showCall(catalogMiss))
 	}
+
+	// Case 4 (FR-1 AC-2): a pol/latn project with no ContentsTitle override must
+	// resolve lang="pl" (via T1's languageInfo fix) and emit the catalog entry
+	// "Spis treści". Before T1, languageInfo("pol", "latn") returned "en", so
+	// "Contents" (not "Spis treści") would be emitted.
+	polUnset, err := assembleTypstDocument(
+		&EBookProject{Title: "T", Language: "pol", Script: "latn"}, "pl", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument(pol no-override) error = %v", err)
+	}
+	wantPol := `contents-title: "Spis treści"`
+	if !strings.Contains(showCall(polUnset), wantPol) {
+		t.Errorf("expected %q for pol project with no override (FR-1 AC-2), got:\n%s", wantPol, showCall(polUnset))
+	}
+
+	// Case 5 (FR-1 AC-3): an explicit ContentsTitle in a pol project must win
+	// over the "Spis treści" catalog entry — the override path must not be
+	// bypassed now that "pl" is a known catalog key.
+	polExplicit, err := assembleTypstDocument(
+		&EBookProject{Title: "T", Language: "pol", Script: "latn", ContentsTitle: "Custom TOC"}, "pl", "ltr", "", []string{"body"}, config.PdfConfig{})
+	if err != nil {
+		t.Fatalf("assembleTypstDocument(pol explicit override) error = %v", err)
+	}
+	wantPolExplicit := `contents-title: "Custom TOC"`
+	if !strings.Contains(showCall(polExplicit), wantPolExplicit) {
+		t.Errorf("expected %q for pol project with explicit override (FR-1 AC-3), got:\n%s", wantPolExplicit, showCall(polExplicit))
+	}
+	if strings.Contains(showCall(polExplicit), `"Spis treści"`) {
+		t.Errorf("pol explicit override must not emit catalog string %q (FR-1 AC-3), got:\n%s", "Spis treści", showCall(polExplicit))
+	}
+}
+
+// --- extensionless filename: derivedTypstPaths + epubExporter (FR-1 AC-2, FR-2) ---
+
+// TestDerivedTypstPathsExtensionless asserts derivedTypstPaths produces
+// identical .pdf/.typ paths for both an extensionless and a .epub-suffixed
+// input (FR-1 AC-2, FR-2 AC-3). This is a pure-function test; no I/O required.
+func TestDerivedTypstPathsExtensionless(t *testing.T) {
+	// Extensionless input must produce the expected paths.
+	pdfNoExt, typNoExt := derivedTypstPaths("/a/b/sample")
+	if pdfNoExt != "/a/b/sample.pdf" {
+		t.Errorf("derivedTypstPaths(extensionless) pdf = %q, want %q", pdfNoExt, "/a/b/sample.pdf")
+	}
+	if typNoExt != "/a/b/sample.typ" {
+		t.Errorf("derivedTypstPaths(extensionless) typ = %q, want %q", typNoExt, "/a/b/sample.typ")
+	}
+
+	// .epub-suffixed input must produce identical paths (FR-1 AC-2 regression guard).
+	pdfExt, typExt := derivedTypstPaths("/a/b/sample.epub")
+	if pdfExt != pdfNoExt {
+		t.Errorf("derivedTypstPaths(.epub) pdf = %q, want %q (same as extensionless)", pdfExt, pdfNoExt)
+	}
+	if typExt != typNoExt {
+		t.Errorf("derivedTypstPaths(.epub) typ = %q, want %q (same as extensionless)", typExt, typNoExt)
+	}
+}
+
+// TestEPUBExporterExtensionlessFilename asserts FR-2 AC-1 (Filename without
+// extension → Export writes and returns <name>.epub) and FR-2 AC-2 (.epub-
+// suffixed Filename → identical path, regression guard). The generated file is
+// opened as a zip archive to confirm it is a structurally valid EPUB, not just
+// a path-string check (mirrors TestEPUBExporterGlobalChapterNumbering above).
+func TestEPUBExporterExtensionlessFilename(t *testing.T) {
+	dir := t.TempDir()
+
+	// Write fixture files once; both sub-cases share them.
+	secPath := filepath.Join(dir, "sec.md")
+	chPath := filepath.Join(dir, "ch.md")
+	for _, pair := range [][2]string{
+		{secPath, "# Section\n\nIntro.\n"},
+		{chPath, "# Chapter\n\nBody.\n"},
+	} {
+		if err := os.WriteFile(pair[0], []byte(pair[1]), 0o644); err != nil {
+			t.Fatalf("write fixture %q: %v", pair[0], err)
+		}
+	}
+	texts := [][]string{{secPath, chPath}}
+	wantPath := filepath.Join(dir, "mybook.epub")
+
+	// --- FR-2 AC-1: extensionless Filename → <name>.epub written + returned --
+	outfile, err := (epubExporter{}).Export(&EBookProject{
+		Identifier: "urn:test:noext-ac1",
+		Filename:   filepath.Join(dir, "mybook"),
+		Title:      "Extension Test",
+		Language:   "eng",
+		Text:       texts,
+	})
+	if err != nil {
+		t.Fatalf("Export(extensionless) error = %v", err)
+	}
+	if outfile != wantPath {
+		t.Errorf("Export(extensionless) outfile = %q, want %q", outfile, wantPath)
+	}
+	// Open as zip to confirm the file is a structurally valid EPUB.
+	r, err := zip.OpenReader(outfile)
+	if err != nil {
+		t.Fatalf("open extensionless-derived EPUB as zip: %v", err)
+	}
+	r.Close()
+
+	// --- FR-2 AC-2: .epub-suffixed Filename → identical path (regression guard)
+	outfile2, err := (epubExporter{}).Export(&EBookProject{
+		Identifier: "urn:test:noext-ac2",
+		Filename:   filepath.Join(dir, "mybook.epub"),
+		Title:      "Extension Test",
+		Language:   "eng",
+		Text:       texts,
+	})
+	if err != nil {
+		t.Fatalf("Export(.epub-suffixed) error = %v", err)
+	}
+	if outfile2 != wantPath {
+		t.Errorf("Export(.epub-suffixed) outfile = %q, want %q (baseOutputName strips then re-appends .epub: net no-op)", outfile2, wantPath)
+	}
 }

@@ -57,12 +57,13 @@ func (epubExporter) Export(project *EBookProject) (string, error) {
 		return "", err
 	}
 
-	err = book.Write(project.Filename)
+	outfile := baseOutputName(project.Filename) + ".epub"
+	err = book.Write(outfile)
 	if err != nil {
 		return "", err
 	}
 
-	return project.Filename, nil
+	return outfile, nil
 }
 
 func setCover(book *epub.Epub, cover string, stylesheets EBookStyles) (string, error) {
