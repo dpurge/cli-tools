@@ -216,6 +216,83 @@ func renderParallel(w util.BufWriter, source []byte, node gast.Node, entering bo
 	return gast.WalkContinue, nil
 }
 
+// renderParallelDialog emits the `<div class="parallel-dialog">` wrapper:
+// {start-parallel}'s row/cell shape (renderParallel, above) where each cell
+// carries a {start-dialog} turn or heading (renderParallelDialogItem) instead
+// of arbitrary recursed markdown. Column dir rules are identical to
+// renderParallel: the primary (.main) cell's .parallel-dialog-source carries
+// dir=blockDirection(n.Script); a present transcription stacks below it
+// inside .main with dir="ltr" pinned (ASR-6/ASR-8 — transcription must not
+// inherit the source's marker direction); the secondary (.secondary) cell
+// carries no dir attribute (translation inherits the book's own direction).
+func renderParallelDialog(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*ParallelDialog)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+
+	io.WriteString(w, badgeOnlyHTML("R"))
+	io.WriteString(w, "<div class=\"parallel-dialog")
+	io.WriteString(w, scriptClass(n.Script))
+	io.WriteString(w, "\">\n")
+	for _, row := range n.Rows {
+		io.WriteString(w, "<div class=\"parallel-dialog-row\">\n")
+
+		io.WriteString(w, "<div class=\"parallel-dialog-cell main\">\n")
+		io.WriteString(w, "<div class=\"parallel-dialog-source\" dir=\"")
+		io.WriteString(w, blockDirection(n.Script))
+		io.WriteString(w, "\">\n")
+		if err := renderParallelDialogItem(w, row.Source); err != nil {
+			return gast.WalkStop, err
+		}
+		io.WriteString(w, "</div>\n")
+		if row.HasTranscription {
+			io.WriteString(w, "<div class=\"parallel-dialog-transcription\" dir=\"ltr\">\n")
+			if err := renderParallelDialogItem(w, row.Transcription); err != nil {
+				return gast.WalkStop, err
+			}
+			io.WriteString(w, "</div>\n")
+		}
+		io.WriteString(w, "</div>\n")
+
+		io.WriteString(w, "<div class=\"parallel-dialog-cell secondary\">\n")
+		if err := renderParallelDialogItem(w, row.Translation); err != nil {
+			return gast.WalkStop, err
+		}
+		io.WriteString(w, "</div>\n")
+
+		io.WriteString(w, "</div>\n")
+	}
+	io.WriteString(w, "</div>\n")
+
+	return gast.WalkContinue, nil
+}
+
+// renderParallelDialogItem emits one field's parsed item: a heading (raw
+// <hN>, no id — mirrors renderDialog's ItemHeader/ASR-6/ASR-4 convention) or
+// a turn (.parallel-dialog-item wrapping a .parallel-dialog-header and a
+// .parallel-dialog-content whose Content recurses through ToHTML, mirroring
+// renderDialog's ItemData handling).
+func renderParallelDialogItem(w util.BufWriter, item ParallelDialogItem) error {
+	if item.Kind == ItemHeader {
+		fmt.Fprintf(w, "<h%d>%s</h%d>\n", item.Level, item.Text, item.Level)
+		return nil
+	}
+	content, err := ToHTML([]byte(item.Content))
+	if err != nil {
+		return err
+	}
+	io.WriteString(w, "<div class=\"parallel-dialog-item\">\n<div class=\"parallel-dialog-header\">")
+	io.WriteString(w, item.Header)
+	io.WriteString(w, "</div>\n<div class=\"parallel-dialog-content\">")
+	w.Write(content)
+	io.WriteString(w, "</div>\n</div>\n")
+	return nil
+}
+
 // renderModels emits the `<div class="models">` wrapper (SPECS decision:
 // like vocabulary minus grammar/notes). Per item:
 //   - phrase only (no transcription, no translation) renders as a plain,
@@ -480,6 +557,12 @@ type parallelRenderer struct{}
 
 func (r *parallelRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(KindParallel, renderParallel)
+}
+
+type parallelDialogRenderer struct{}
+
+func (r *parallelDialogRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(KindParallelDialog, renderParallelDialog)
 }
 
 type modelsRenderer struct{}

@@ -43,6 +43,21 @@ func (e *parallelExtension) Extend(m goldmark.Markdown) {
 	))
 }
 
+// parallelDialogExtension registers the parallel-dialog block parser and
+// renderer. Priority 125 — after parallel (120), before models (130); the
+// opensRawBlock boundary guard already disambiguates it from plain
+// {start-parallel} regardless of registration order (parser.go).
+type parallelDialogExtension struct{}
+
+func (e *parallelDialogExtension) Extend(m goldmark.Markdown) {
+	m.Parser().AddOptions(parser.WithBlockParsers(
+		util.Prioritized(newParallelDialogParser(), 125),
+	))
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(
+		util.Prioritized(&parallelDialogRenderer{}, 125),
+	))
+}
+
 // modelsExtension registers the models block parser and renderer.
 type modelsExtension struct{}
 
@@ -85,10 +100,11 @@ func (e *textExtension) Extend(m goldmark.Markdown) {
 // Extenders wired into the shared converter (converter.go). Interlinear is
 // deliberately excluded — it remains an inactive stub (interlinear.go).
 var (
-	vocabularyExtender goldmark.Extender = &vocabularyExtension{}
-	dialogExtender     goldmark.Extender = &dialogExtension{}
-	parallelExtender   goldmark.Extender = &parallelExtension{}
-	modelsExtender     goldmark.Extender = &modelsExtension{}
-	questionsExtender  goldmark.Extender = &questionsExtension{}
-	textExtender       goldmark.Extender = &textExtension{}
+	vocabularyExtender     goldmark.Extender = &vocabularyExtension{}
+	dialogExtender         goldmark.Extender = &dialogExtension{}
+	parallelExtender       goldmark.Extender = &parallelExtension{}
+	parallelDialogExtender goldmark.Extender = &parallelDialogExtension{}
+	modelsExtender         goldmark.Extender = &modelsExtension{}
+	questionsExtender      goldmark.Extender = &questionsExtension{}
+	textExtender           goldmark.Extender = &textExtension{}
 )

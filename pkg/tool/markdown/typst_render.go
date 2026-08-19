@@ -59,6 +59,7 @@ func (r *typstNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(KindParallel, renderParallelTypst)
 	reg.Register(KindModels, renderModelsTypst)
 	reg.Register(KindQuestions, renderQuestionsTypst)
+	reg.Register(KindParallelDialog, renderParallelDialogTypst)
 	// KindText MUST be registered last (highest ordinal, ASR-1 panic-gate).
 	reg.Register(KindText, renderTextblockTypst)
 }
@@ -610,6 +611,79 @@ func renderParallelTypst(w util.BufWriter, source []byte, node gast.Node, enteri
 	io.WriteString(w, ")\n\n")
 
 	return gast.WalkContinue, nil
+}
+
+// renderParallelDialogTypst emits `#parallel-dialog(source-dir: <dir>,
+// script: "<script>", (source: <item dict>, translation: <item dict>[,
+// transcription: <item dict>]), ...)`. Each field's item dict is written by
+// writeParallelDialogItemDictTypst, reusing dialog()'s exact per-turn dict
+// shape (`(kind: "header", level:, text:)` or `(header:, content:)`) —
+// `transcription:` is emitted ONLY when HasTranscription (key omission, not
+// empty content, mirrors renderParallelTypst's "transcription" in r idiom,
+// SPECS §7.2). A parse-time error stops rendering immediately, mirroring
+// renderDialogTypst/renderParallelTypst.
+func renderParallelDialogTypst(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*ParallelDialog)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+
+	sourceDir := blockDirection(n.Script)
+	io.WriteString(w, badgeOnlyTypst("R"))
+	io.WriteString(w, "#parallel-dialog(source-dir: ")
+	io.WriteString(w, sourceDir)
+	io.WriteString(w, `, script: "`)
+	io.WriteString(w, escapeTypstString(n.Script))
+	io.WriteString(w, "\",\n")
+	for _, row := range n.Rows {
+		io.WriteString(w, "  (source: ")
+		if err := writeParallelDialogItemDictTypst(w, row.Source); err != nil {
+			return gast.WalkStop, err
+		}
+		io.WriteString(w, ", translation: ")
+		if err := writeParallelDialogItemDictTypst(w, row.Translation); err != nil {
+			return gast.WalkStop, err
+		}
+		if row.HasTranscription {
+			io.WriteString(w, ", transcription: ")
+			if err := writeParallelDialogItemDictTypst(w, row.Transcription); err != nil {
+				return gast.WalkStop, err
+			}
+		}
+		io.WriteString(w, "),\n")
+	}
+	io.WriteString(w, ")\n\n")
+
+	return gast.WalkContinue, nil
+}
+
+// writeParallelDialogItemDictTypst writes one field's item as a Typst dict
+// literal — `(kind: "header", level: N, text: "...")` for a title, or
+// `(header: "...", content: [<ToTypst(item.Content)>])` for a turn — the
+// identical shape renderDialogTypst already uses per-item (ItemHeader vs
+// ItemData), just returned as a value instead of appended to a list.
+func writeParallelDialogItemDictTypst(w util.BufWriter, item ParallelDialogItem) error {
+	if item.Kind == ItemHeader {
+		io.WriteString(w, `(kind: "header", level: `)
+		io.WriteString(w, strconv.Itoa(item.Level))
+		io.WriteString(w, `, text: "`)
+		io.WriteString(w, escapeTypstString(item.Text))
+		io.WriteString(w, `")`)
+		return nil
+	}
+	content, err := ToTypst([]byte(item.Content))
+	if err != nil {
+		return err
+	}
+	io.WriteString(w, `(header: "`)
+	io.WriteString(w, escapeTypstString(item.Header))
+	io.WriteString(w, `", content: [`)
+	w.Write(content)
+	io.WriteString(w, "])")
+	return nil
 }
 
 // renderModelsTypst emits `#models((phrase:"..", transcription:"..",

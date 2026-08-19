@@ -13,13 +13,14 @@ import (
 // (index out of range) — see the identical warning on typstNodeRenderer/
 // mdxNodeRenderer and SPECS ASR-1.
 var (
-	KindVocabulary  = gast.NewNodeKind("Vocabulary")
-	KindDialog      = gast.NewNodeKind("Dialog")
-	KindParallel    = gast.NewNodeKind("Parallel")
-	KindInterlinear = gast.NewNodeKind("Interlinear")
-	KindModels      = gast.NewNodeKind("Models")
-	KindQuestions   = gast.NewNodeKind("Questions")
-	KindText        = gast.NewNodeKind("Text") // MUST be last; highest ordinal (ASR-1)
+	KindVocabulary     = gast.NewNodeKind("Vocabulary")
+	KindDialog         = gast.NewNodeKind("Dialog")
+	KindParallel       = gast.NewNodeKind("Parallel")
+	KindInterlinear    = gast.NewNodeKind("Interlinear")
+	KindModels         = gast.NewNodeKind("Models")
+	KindQuestions      = gast.NewNodeKind("Questions")
+	KindParallelDialog = gast.NewNodeKind("ParallelDialog")
+	KindText           = gast.NewNodeKind("Text") // MUST be last; highest ordinal (ASR-1)
 )
 
 // ItemKind discriminates the kind of item within a structured block.
@@ -153,6 +154,54 @@ func (n *Parallel) Dump(source []byte, level int) {
 	gast.DumpHelper(n, source, level, nil, nil)
 }
 
+// ParallelDialogItem is one field of a {start-parallel-dialog} row: either a
+// dialog turn (Header+Content, same grammar as DialogItem) or a title
+// (BlockAnnotation.Kind==ItemHeader). Exactly one item per present field —
+// unlike Dialog, a field never holds a run of several turns.
+type ParallelDialogItem struct {
+	BlockAnnotation
+	Header  string
+	Content string
+}
+
+// ParallelDialogRow is one row of a {start-parallel-dialog} block, split on
+// every lone "---" (up to 3, same field count as ParallelRow): Source and
+// Translation are mandatory; Transcription is optional. Unlike
+// ParallelRow's Transcription (raw markdown), all three fields here share
+// the identical turn/heading grammar — Transcription differs only in which
+// font it renders with (pinned Latin/LTR), not in how it is authored.
+type ParallelDialogRow struct {
+	Source           ParallelDialogItem
+	Translation      ParallelDialogItem
+	Transcription    ParallelDialogItem
+	HasTranscription bool // Transcription field was present in the source (3rd "---" field supplied)
+}
+
+// ParallelDialog is the block node for a `{start-parallel-dialog}` ...
+// `{end-parallel-dialog}` block: {start-parallel}'s row/field grid where
+// each field carries a {start-dialog} turn instead of arbitrary markdown.
+// Lang and Script are populated from marker attributes (M1); as= is
+// rejected, mirroring Parallel (both columns' languages are fixed). Err is
+// set when marker attributes or a row/field are malformed.
+type ParallelDialog struct {
+	gast.BaseBlock
+
+	Lang, Script string
+	Err          error
+	Rows         []ParallelDialogRow
+}
+
+// Kind implements ast.Node.
+func (n *ParallelDialog) Kind() gast.NodeKind { return KindParallelDialog }
+
+// IsRaw marks the block as raw; see Vocabulary.IsRaw.
+func (n *ParallelDialog) IsRaw() bool { return true }
+
+// Dump implements ast.Node.
+func (n *ParallelDialog) Dump(source []byte, level int) {
+	gast.DumpHelper(n, source, level, nil, nil)
+}
+
 // ModelsItem is one parsed `{start-models}` line: a phrase plus its
 // optional transcription and translation. Like VocabularyItem, minus
 // Grammar (Cycle 1 scope: no grammar tag, no notes).
@@ -231,8 +280,8 @@ type Text struct {
 	gast.BaseBlock
 
 	As, Lang, Script, System string
-	Raw                       string
-	Err                       error
+	Raw                      string
+	Err                      error
 }
 
 // Kind implements ast.Node.

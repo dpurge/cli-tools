@@ -442,8 +442,22 @@
 }
 
 // role: see questions' comment above (named `role`, not `as` — reserved).
-#let dialog(dir: ltr, script: "", role: "source", ..turns) = {
-  set text(dir: dir)
+// ext and field default to "dialog"/"content" (unchanged font-token/base-role
+// behavior for every existing {start-dialog} call site, which never passes
+// either) — parameterized so parallel-dialog() below can reuse this exact
+// per-turn/heading rendering and gate logic for all three of its columns
+// instead of duplicating it: source/translation keep field:"content" (Body/
+// Translation base role, via _baseRoleFor), while the transcription column
+// passes field:"transcription" so ITS content resolves the Transcription
+// base role instead (matching vocabulary/models/parallel's own transcription
+// field, ASR-6) — only the turn's HEADER sub-field stays hardcoded "header"
+// below, since the speaker label keeps its normal Header-role styling in
+// every case. dir: none skips `set text(dir:)` entirely (inherit the
+// enclosing ambient direction instead of forcing one) — used by
+// parallel-dialog()'s translation column, mirroring parallel()'s own
+// "no dir: override" rule for its translation field (ASR-1/ASR-4).
+#let dialog(dir: ltr, script: "", role: "source", ext: "dialog", field: "content", ..turns) = {
+  if dir != none { set text(dir: dir) }
   // SPECS §5: dialog accepts as=source|translation; as=translation
   // resolves header/content via the Translation base role (Major-2: fixed
   // script for the FAMILY chain only — the Strong gate below still reads
@@ -465,10 +479,10 @@
   // which would otherwise re-substitute whenever the BOOK itself is large
   // script, regardless of this field's own (decoupled) familyScript.
   show strong: it => if _isLargeScript(familyScript) {
-    context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", style: "strong", as-translation: asTranslation), weight: "regular", it.body)
+    context text(font: _resolveFont(script: familyScript, ext: ext, field: field, style: "strong", as-translation: asTranslation), weight: "regular", it.body)
   } else { text(weight: "bold", it.body) }
   show emph: it => if _isLargeScript(familyScript) {
-    context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", style: "emphasis", as-translation: asTranslation), style: "normal", it.body)
+    context text(font: _resolveFont(script: familyScript, ext: ext, field: field, style: "emphasis", as-translation: asTranslation), style: "normal", it.body)
   } else { text(style: "italic", it.body) }
 
   let run = ()
@@ -495,11 +509,11 @@
     } else {
       run += (
         if _isLargeScript(familyScript) {
-          context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "header", style: "strong", as-translation: asTranslation), weight: "regular", size: _foreignSize(familyScript), t.at("header", default: ""))
+          context text(font: _resolveFont(script: familyScript, ext: ext, field: "header", style: "strong", as-translation: asTranslation), weight: "regular", size: _foreignSize(familyScript), t.at("header", default: ""))
         } else {
           context text(size: if asTranslation { _baseSize() } else { 1em }, weight: "bold", t.at("header", default: ""))
         },
-        context text(font: _resolveFont(script: familyScript, ext: "dialog", field: "content", as-translation: asTranslation), size: if asTranslation { _baseSize() } else { _foreignSize(familyScript) })[#t.at("content", default: [])],
+        context text(font: _resolveFont(script: familyScript, ext: ext, field: field, as-translation: asTranslation), size: if asTranslation { _baseSize() } else { _foreignSize(familyScript) })[#t.at("content", default: [])],
       )
     }
   }
@@ -568,6 +582,53 @@
       // book-level large-script gate (deliberately absent, not a separate
       // mechanism). No dir: override — inherits book ambient direction.
       context text(font: _resolveFont(script: "", ext: "parallel", field: "translation"), size: _baseSize())[#r.at("translation", default: [])],
+    )).flatten()
+  ))
+}
+
+// parallel-dialog combines parallel()'s two-column/transcription-stacking
+// grid (identical column semantics/ASR-1/ASR-4/ASR-8 reasoning as parallel()
+// above) with dialog()'s per-turn/heading rendering — reused via dialog()'s
+// `ext:`/`field:`/`dir: none` parameters (above) instead of re-implementing
+// the gate/sizing logic. Each row dict carries `source:`/`translation:`
+// [/`transcription:`], each itself a single turn-or-heading dict — the SAME
+// shape dialog()'s own per-item entries use — passed to dialog() as its lone
+// positional turn, so every column reuses 100% of dialog()'s tested logic:
+//   - SOURCE: dialog(dir: source-dir, script: script, role: "source",
+//     ext: "parallel-dialog") — marker script/dir; dialog()'s own
+//     show-strong/emph is scoped to just this call, so it cannot bleed into
+//     the transcription stacked after it (ASR-8, same guarantee parallel()
+//     gets from its explicit inner block).
+//   - TRANSCRIPTION: dialog(dir: ltr, script: "latn", role: "source",
+//     ext: "parallel-dialog", field: "transcription") — pinned Latin/LTR;
+//     field: "transcription" routes the turn's CONTENT through the
+//     Transcription base role (matching vocabulary/models/parallel's own
+//     transcription field) while its HEADER sub-field stays "header"
+//     inside dialog() — same speaker-label styling as the source turn, only
+//     the utterance's own font changes, per the approved "same content,
+//     same formatting as source" rule. Present only when the row dict
+//     carries the "transcription" key (dict-key-presence idiom, mirrors
+//     parallel()'s "transcription" in r check).
+//   - TRANSLATION: dialog(dir: none, script: script, role: "translation",
+//     ext: "parallel-dialog") — role: "translation" routes content through
+//     the Translation base role and fixes familyScript to "" (dialog()'s own
+//     asTranslation branch, so a large BOOK script cannot leak a large-script
+//     substitute onto this fixed-family field); dir: none skips dialog()'s
+//     direction override so it inherits the book's own ambient direction
+//     instead, mirroring parallel()'s translation column exactly.
+#let parallel-dialog(source-dir: ltr, script: "", ..rows) = {
+  block(width: 100%, grid(
+    columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em,
+    stroke: (x: 0.5pt + luma(230)),
+    align: (start + top, start + top),
+    ..rows.pos().map(r => (
+      {
+        dialog(dir: source-dir, script: script, role: "source", ext: "parallel-dialog", r.at("source"))
+        if "transcription" in r {
+          dialog(dir: ltr, script: "latn", role: "source", ext: "parallel-dialog", field: "transcription", r.at("transcription"))
+        }
+      },
+      dialog(dir: none, script: script, role: "translation", ext: "parallel-dialog", r.at("translation")),
     )).flatten()
   ))
 }

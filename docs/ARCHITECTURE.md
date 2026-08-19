@@ -28,7 +28,7 @@ Each `cmd/<tool>/main.go` is a thin entrypoint; all logic lives in the matching
   translation/grammar).
 - **`pkg/tool/markdown`** — custom Goldmark (CommonMark/GFM) extension. Parses
   the project's `{start-X}/{end-X}` block markers (vocabulary, models,
-  questions, dialog, parallel, text) into AST nodes (`ast.go`, `marker.go`,
+  questions, dialog, parallel, parallel-dialog, text) into AST nodes (`ast.go`, `marker.go`,
   `parser.go`) and renders each to HTML (EPUB), Typst (PDF), and MDX via
   dedicated renderers (`renderer.go`, `typst_render.go`, `mdx_render.go`).
   `interlinear.go` and `linktarget.go` support parallel-text and cross-block

@@ -209,6 +209,91 @@ func TestBookTyp_ParallelNoTranscriptionKeyCompiles(t *testing.T) {
 `)
 }
 
+// TestBookTyp_ParallelDialogSourceBoldUsesGate is parallel-dialog()'s
+// analogue of TestBookTyp_ParallelSourceBoldUsesGate: each column is a
+// dialog() call reusing its exact per-field gate logic (ext:
+// "parallel-dialog"), so the SOURCE turn's bold (large script, marker
+// script="arab") must resolve the scoped large-script Strong slot
+// ("qualifiedstrongfont", same bare-style fallback parallel()'s own source
+// gate resolves to — the "arab parallel-dialog content strong" qualified
+// key was never seeded, so both fall back to the bare "strong" slot), while
+// the TRANSLATION turn's bold — role: "translation" fixes familyScript to
+// "" (never large) — finalizes locally to the Translation-role family
+// ("transfont") via dialog()'s own asTranslation branch, exactly like
+// {start-dialog as=translation}'s established behavior
+// (TestBookTyp_TranslationRoleBoldStaysInFamilyScript, above) — NOT
+// falling through to book-level like plain parallel()'s translation column
+// does (that column installs no local gate at all; here dialog() always
+// installs one, which is the whole point of reusing it: independent
+// per-column font resolution, approved design).
+func TestBookTyp_ParallelDialogSourceBoldUsesGate(t *testing.T) {
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#parallel-dialog(script: "arab", (
+  source: (header: "S:", content: [Plain #strong[BOLD#context [#metadata(text.font) <pd-source-bold>]] text.]),
+  translation: (header: "T:", content: [Plain #strong[BOLD#context [#metadata(text.font) <pd-trans-bold>]] text.]),
+),)
+`)
+	sourceGot := typstQueryFirstFamily(t, typstPath, typPath, "<pd-source-bold>")
+	transGot := typstQueryFirstFamily(t, typstPath, typPath, "<pd-trans-bold>")
+
+	if sourceGot != "qualifiedstrongfont" {
+		t.Errorf("parallel-dialog SOURCE turn bold resolved font = %q, want %q (source's own large-script gate, keyed on marker script)", sourceGot, "qualifiedstrongfont")
+	}
+	if transGot != "transfont" {
+		t.Errorf("parallel-dialog TRANSLATION turn bold resolved font = %q, want %q (finalizes to the Translation-role family, isolated from book-level, mirrors {start-dialog as=translation})", transGot, "transfont")
+	}
+	if sourceGot == transGot {
+		t.Errorf("parallel-dialog source and translation bold resolved to the SAME family %q -- per-column isolation is not actually working", sourceGot)
+	}
+}
+
+// TestBookTyp_ParallelDialogTranscriptionBoldIsolated verifies the
+// transcription column (field: "transcription", script: "latn" pinned)
+// resolves its bold to the Transcription-role family ("transfont" here,
+// same seeded slot as translation) and NOT to the source column's scoped
+// large-script gate ("qualifiedstrongfont") — proving the approved "same
+// content, same formatting as source, just a transcription font" rule:
+// same turn/gate mechanics as source, but its OWN field routes content
+// through the Transcription base role instead of Body.
+func TestBookTyp_ParallelDialogTranscriptionBoldIsolated(t *testing.T) {
+	typstPath, typPath := compileBookTypGateFixture(t, `
+#parallel-dialog(script: "arab", (
+  source: (header: "S:", content: [Plain #strong[BOLD#context [#metadata(text.font) <pd-source-bold2>]] text.]),
+  translation: (header: "T:", content: [Translation text.]),
+  transcription: (header: "S:", content: [#strong[BOLD#context [#metadata(text.font) <pd-transcription-bold>]] roman.]),
+),)
+`)
+	sourceGot := typstQueryFirstFamily(t, typstPath, typPath, "<pd-source-bold2>")
+	transcriptionGot := typstQueryFirstFamily(t, typstPath, typPath, "<pd-transcription-bold>")
+
+	if sourceGot != "qualifiedstrongfont" {
+		t.Errorf("parallel-dialog SOURCE turn bold resolved font = %q, want %q", sourceGot, "qualifiedstrongfont")
+	}
+	if transcriptionGot != "transfont" {
+		t.Errorf("parallel-dialog TRANSCRIPTION turn bold resolved font = %q, want %q (Transcription base role via field: \"transcription\")", transcriptionGot, "transfont")
+	}
+	if sourceGot == transcriptionGot {
+		t.Errorf("source and transcription bold resolved to the SAME family %q -- transcription is not resolving its own field/role", sourceGot)
+	}
+}
+
+// TestBookTyp_ParallelDialogNoTranscriptionKeyCompiles mirrors
+// TestBookTyp_ParallelNoTranscriptionKeyCompiles: a 2-field row (no
+// "transcription" key) and a title row (heading dicts instead of turns)
+// both compile clean.
+func TestBookTyp_ParallelDialogNoTranscriptionKeyCompiles(t *testing.T) {
+	compileBookTypGateFixture(t, `
+#parallel-dialog(script: "latn", (
+  source: (header: "S:", content: [Source.]),
+  translation: (header: "T:", content: [Translation.]),
+),)
+#parallel-dialog(script: "latn", (
+  source: (kind: "header", level: 2, text: "Chapter One"),
+  translation: (kind: "header", level: 2, text: "Rozdzial pierwszy"),
+),)
+`)
+}
+
 // TestBookTyp_VocabularyPhraseBoldFinalizes is the regression test for the
 // residual limitation flagged at the end of the fix-pass impl log (SPECS
 // §8.4): vocabulary's (and models', same pattern) phrase field always bolds
@@ -634,9 +719,10 @@ Body text.
 // Setup: base 10pt, _sizeFactor=1.5. No book-level heading-size rules are added;
 // Typst's built-in per-level default (1.2em for H2) drives the final size.
 // Thresholds chosen to lie between the correct value and the buggy value:
-//   AC-1/parity: correct=12pt, bug=18pt  → threshold < 15pt
-//   AC-2/body:   correct=15pt            → threshold > 12pt
-//   AC-3/latn:   correct=12pt, bug=~8pt  → threshold > 9pt
+//
+//	AC-1/parity: correct=12pt, bug=18pt  → threshold < 15pt
+//	AC-2/body:   correct=15pt            → threshold > 12pt
+//	AC-3/latn:   correct=12pt, bug=~8pt  → threshold > 9pt
 func TestBookTyp_FR1_TextblockDialogHeadingParity(t *testing.T) {
 	typstPath, typPath := compileBookTypGateFixture(t, `
 #set text(size: 10pt)
@@ -692,9 +778,11 @@ Body text.
 // Centering is verified via a #metadata(here().position().x > 100pt) probe
 // placed at the VERY START of the heading body (before any visible text).
 // In Typst's default page (A4, 2.5cm margins = ≈70.87pt each side):
-//   left-aligned start x ≈ 70.87pt → probe returns false (<100pt)
-//   center-aligned start x ≈ (page_width − margin×2 − heading_width)/2 + margin
-//                          ≈ 270pt for a short heading → probe returns true (>>100pt)
+//
+//	left-aligned start x ≈ 70.87pt → probe returns false (<100pt)
+//	center-aligned start x ≈ (page_width − margin×2 − heading_width)/2 + margin
+//	                       ≈ 270pt for a short heading → probe returns true (>>100pt)
+//
 // The 100pt threshold cleanly separates these without requiring exact page metrics.
 func TestBookTyp_FR5_BlockHeaderCentered(t *testing.T) {
 	typstPath, typPath := compileStructuredBlockFixture(t, `

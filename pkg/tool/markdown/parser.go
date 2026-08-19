@@ -24,6 +24,14 @@ var (
 	startParallel = []byte("{start-parallel")
 	endParallel   = []byte("{end-parallel}")
 
+	// startParallelDialog must be checked before/independent of startParallel
+	// collision: opensRawBlock's boundary guard (below) already rejects
+	// "{start-parallel-dialog...}" as a match for the shorter startParallel
+	// prefix (the byte after "{start-parallel" is '-', not '}'/whitespace/EOL),
+	// so registration order between the two block parsers does not matter.
+	startParallelDialog = []byte("{start-parallel-dialog")
+	endParallelDialog   = []byte("{end-parallel-dialog}")
+
 	startModels = []byte("{start-models")
 	endModels   = []byte("{end-models}")
 
@@ -463,6 +471,157 @@ func parseParallelRows(inner string) []ParallelRow {
 	}
 
 	return rows
+}
+
+// ---------------------------------------------------------------------
+// ParallelDialog
+// ---------------------------------------------------------------------
+
+type parallelDialogParser struct{}
+
+func newParallelDialogParser() parser.BlockParser { return &parallelDialogParser{} }
+
+func (b *parallelDialogParser) Trigger() []byte { return []byte{'{'} }
+
+func (b *parallelDialogParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
+	markerLine, ok := opensRawBlock(reader, startParallelDialog, endParallelDialog)
+	if !ok {
+		return nil, parser.NoChildren
+	}
+	n := &ParallelDialog{}
+	attrs, err := parseMarkerAttrs(markerLine, "parallel-dialog")
+	if err != nil {
+		n.Err = err
+	} else {
+		// as= is rejected entirely, mirroring Parallel: both columns'
+		// languages are already fixed by the row/field position.
+		if attrs.As != "" {
+			n.Err = fmt.Errorf("as= not applicable to {start-parallel-dialog}: its field languages are fixed")
+		}
+		n.Lang = attrs.Lang
+		n.Script = attrs.Script
+	}
+	return n, parser.NoChildren
+}
+
+func (b *parallelDialogParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
+	return continueRawBlock(node, reader, endParallelDialog)
+}
+
+func (b *parallelDialogParser) Close(node gast.Node, reader text.Reader, pc parser.Context) {
+	n := node.(*ParallelDialog)
+	rows, err := parseParallelDialogRows(rawBlockText(node, reader))
+	n.Rows = rows
+	// Preserve an Open-time error (malformed attribute, or the as=
+	// rejection above), mirroring Dialog.Close's identical precedence rule
+	// (an Open-time error must never be silently overwritten by a
+	// content-parse result, even a nil one).
+	if n.Err == nil {
+		n.Err = err
+	}
+}
+
+func (b *parallelDialogParser) CanInterruptParagraph() bool { return true }
+func (b *parallelDialogParser) CanAcceptIndentedLine() bool { return false }
+
+// parseParallelDialogRows parses the dedented `{start-parallel-dialog}` body
+// into rows. Rows are separated by a "===" line; within each row the record
+// is split on every lone "---" line, capped at 3 fields — source,
+// translation, transcription — identical to parseParallelRows's row/field
+// grammar. Unlike Parallel's raw fields, every present field here must
+// parse as exactly one dialog turn or heading (parseParallelDialogField);
+// translation is mandatory (a row with no "---" errors, unlike plain
+// {start-parallel} where the translation field is optional prose).
+func parseParallelDialogRows(inner string) ([]ParallelDialogRow, error) {
+	var rows []ParallelDialogRow
+
+	for _, chunk := range strings.Split(inner, "\n===\n") {
+		s := strings.TrimSpace(chunk)
+		if s == "" {
+			continue
+		}
+
+		fields := strings.SplitN(s, "\n---\n", 3)
+		if len(fields) < 2 {
+			return nil, fmt.Errorf("parallel-dialog row is missing its translation field: %q", s)
+		}
+
+		var row ParallelDialogRow
+		var err error
+		if row.Source, err = parseParallelDialogField(fields[0]); err != nil {
+			return nil, fmt.Errorf("parallel-dialog source field: %w", err)
+		}
+		if row.Translation, err = parseParallelDialogField(fields[1]); err != nil {
+			return nil, fmt.Errorf("parallel-dialog translation field: %w", err)
+		}
+		if len(fields) == 3 {
+			if row.Transcription, err = parseParallelDialogField(fields[2]); err != nil {
+				return nil, fmt.Errorf("parallel-dialog transcription field: %w", err)
+			}
+			row.HasTranscription = true
+		}
+
+		rows = append(rows, row)
+	}
+
+	return rows, nil
+}
+
+// parseParallelDialogField parses one already-"---"-delimited field into
+// exactly one item — a dialog turn (Header+Content) or a heading — using
+// the SAME line grammar as parseDialogItems (isBlockHeader/
+// isDialogItemHeader/getDialogItemHeader, unchanged), just scoped to a
+// single field instead of a whole block. Zero or more-than-one resulting
+// item is an error: unlike a {start-dialog} block, a parallel-dialog field
+// never holds a run of several turns.
+func parseParallelDialogField(field string) (ParallelDialogItem, error) {
+	var items []ParallelDialogItem
+	var buf []string
+	header := ""
+
+	flush := func() {
+		if len(buf) > 0 {
+			items = append(items, ParallelDialogItem{
+				Header:  header,
+				Content: strings.TrimSpace(strings.Join(buf, "\n")),
+			})
+			buf = nil
+		}
+	}
+
+	for _, line := range strings.Split(field, "\n") {
+		s := strings.TrimRight(line, " *")
+
+		if level, text, ok := isBlockHeader(s); ok {
+			flush()
+			items = append(items, ParallelDialogItem{BlockAnnotation: BlockAnnotation{Kind: ItemHeader, Level: level, Text: text}})
+			header = ""
+			continue
+		}
+
+		if isDialogItemHeader(s) {
+			flush()
+			header = getDialogItemHeader(s)
+			continue
+		}
+
+		if s == "" {
+			buf = append(buf, s)
+			continue
+		}
+		if len(s) > 2 && s[:2] == "  " {
+			buf = append(buf, s[2:])
+			continue
+		}
+
+		return ParallelDialogItem{}, fmt.Errorf("wrong line indentation for parallel-dialog item: %s", s)
+	}
+	flush()
+
+	if len(items) != 1 {
+		return ParallelDialogItem{}, fmt.Errorf("field must contain exactly one turn or heading, got %d item(s): %q", len(items), field)
+	}
+	return items[0], nil
 }
 
 // ---------------------------------------------------------------------

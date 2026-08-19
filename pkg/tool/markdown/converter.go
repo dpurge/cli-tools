@@ -44,6 +44,7 @@ var md = goldmark.New(
 		vocabularyExtender,
 		dialogExtender,
 		parallelExtender,
+		parallelDialogExtender,
 		modelsExtender,
 		questionsExtender,
 		textExtender,

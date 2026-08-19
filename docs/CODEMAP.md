@@ -42,7 +42,7 @@ Parses/renders the project's `{start-X}/{end-X}` block markers.
 | `mdx_render.go`, `mdx_escape.go` | MDX renderer |
 | `interlinear.go` | Parallel-text alignment |
 | `linktarget.go` | Cross-block link targets |
-| `*_test.go` | One file per block type / edge case (dialog, questions, models, vocabulary, parallel, text, CRLF, idempotency, named bug regressions) |
+| `*_test.go` | One file per block type / edge case (dialog, questions, models, vocabulary, parallel, parallel-dialog, text, CRLF, idempotency, named bug regressions) |
 
 ## `pkg/config/` — shared configuration
 

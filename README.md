@@ -89,9 +89,9 @@ Unified text block with four roles:
 
 Headings (`h1`–`h3`) inside any text block are centered, and markdown tables span the full text-block width in both outputs. For PDF the direction and font are resolved via `book.typ`'s `#textblock(role:, dir:, ...)` function; for EPUB the class (`text`, `transcription`, `translation`, `grammar`) and `dir` attribute on the wrapper `<div>` drive the matching CSS rules in your stylesheet bundle.
 
-**Block set**: `{start-vocabulary}`, `{start-models}`, `{start-questions}`, `{start-dialog}`, `{start-parallel}`, and `{start-text}`. **`as=` roles** are unified across the blocks that carry a source/translation distinction: `{start-text}` takes `as=source|transcription|translation|grammar`; `{start-dialog}` and `{start-questions}` take `as=source|translation` (an `as=translation` block is in the reader's own language — comprehension questions, a translated dialog — and uses the Translation font); `{start-vocabulary}`, `{start-models}`, and `{start-parallel}` reject `as=` because their field languages are fixed. Validation: an unrecognized `script` value falls back to LTR (no error); an **unknown attribute key**, a **malformed attribute** (missing `=` or unterminated quote), or an **`as=` value not accepted by that block** fails the build with a message naming the offending marker.
+**Block set**: `{start-vocabulary}`, `{start-models}`, `{start-questions}`, `{start-dialog}`, `{start-parallel}`, `{start-parallel-dialog}`, and `{start-text}`. **`as=` roles** are unified across the blocks that carry a source/translation distinction: `{start-text}` takes `as=source|transcription|translation|grammar`; `{start-dialog}` and `{start-questions}` take `as=source|translation` (an `as=translation` block is in the reader's own language — comprehension questions, a translated dialog — and uses the Translation font); `{start-vocabulary}`, `{start-models}`, `{start-parallel}`, and `{start-parallel-dialog}` reject `as=` because their field languages are fixed. Validation: an unrecognized `script` value falls back to LTR (no error); an **unknown attribute key**, a **malformed attribute** (missing `=` or unterminated quote), or an **`as=` value not accepted by that block** fails the build with a message naming the offending marker.
 
-**Headers and notes**: `vocabulary`, `models`, `questions`, and `dialog` blocks accept a line starting with `#` through `######` anywhere inside them as a heading (renders as `h1`–`h6`), interleaved in place among the block's data lines — it's a visual heading local to the block, not a table-of-contents entry. `dialog`, `questions`, and `models` (not `vocabulary`) additionally accept a note — a sentence or phrase alone on a line inside `(...)` — rendered as a centered paragraph (see **Notes** under [Font configuration](#font-configuration-fontcss)). Vocabulary export to CSV skips header lines entirely (no row emitted); phraseforge/MDX export keeps them as literal text.
+**Headers and notes**: `vocabulary`, `models`, `questions`, and `dialog` blocks accept a line starting with `#` through `######` anywhere inside them as a heading (renders as `h1`–`h6`), interleaved in place among the block's data lines — it's a visual heading local to the block, not a table-of-contents entry. `dialog`, `questions`, and `models` (not `vocabulary`) additionally accept a note — a sentence or phrase alone on a line inside `(...)` — rendered as a centered paragraph (see **Notes** under [Font configuration](#font-configuration-fontcss)). Vocabulary export to CSV skips header lines entirely (no row emitted); phraseforge/MDX export keeps them as literal text. `{start-parallel-dialog}` supports headings too, but per-row rather than per-line: a row whose source/translation fields are each a bare heading line renders as a title spanning that row (see below) — it does not accept notes.
 
 **`contents-title` project key**: set in `ebook.yml` to override the PDF outline title (default "Contents"):
 
@@ -170,9 +170,50 @@ The second row above shows the optional third field (transcription).
 
 **Column rule**: the **primary column is the source** — its text direction, font, and (for large scripts) size all come from the marker's `lang=`/`script=` attributes (falling back to the book's own language/script when the marker omits them, same as every other block). If present, the **transcription** stacks directly below the source, inside the same primary column — always rendered as a Latin-script, left-to-right romanization (matching `{start-vocabulary}`'s transcription field), regardless of the marker's or book's own script. The **secondary column is the translation** — always in the book's own language, script, and font, with no marker override. Column *position* (left/right) still follows the **book's** reading direction (RTL book → primary on the right, LTR book → primary on the left); only each column's internal direction/font follows the rule above.
 
+#### `{start-parallel-dialog}` ... `{end-parallel-dialog}`
+
+`{start-parallel}`'s row/field grid where each field is a `{start-dialog}` turn instead of arbitrary text — for a bilingual conversation shown side-by-side, turn by turn. `as=` is not accepted (same reason as `{start-parallel}`: both columns' languages are already fixed by field position).
+
+```
+{start-parallel-dialog lang=ron script=latn}
+@Ion:
+  Bună dimineața!
+---
+@Jan:
+  Dzień dobry!
+===
+@Ion:
+  Bună ziua!
+---
+@Jan:
+  Dzień dobry!
+---
+Buna ziua
+===
+--:
+  Noroc!
+---
+--:
+  Cześć!
+{end-parallel-dialog}
+```
+
+Rows are separated by a lone `===` line, exactly like `{start-parallel}`; within a row, every lone `---` line splits the record into up to **three** fields — **source**, **translation**, **transcription** (the last optional; the second row above shows it). Unlike `{start-parallel}`, **every present field must be a single `{start-dialog}` turn or heading** — the same `@Speaker:`/`--:` turn syntax (a `--:` line always renders as an em dash, regardless of what came before — there is no "same speaker as last time" lookup) or a bare `#`–`######` heading line, one item per field, never a run of several. A row with no `---` (translation missing) is an error — unlike plain `{start-parallel}`, translation is mandatory here.
+
+**Column rule**: identical to `{start-parallel}` — source's turn/heading takes its direction, font, and size from the marker's `lang=`/`script=`; translation's turn/heading always uses the book's own language/script/font, with no marker override, and inherits the book's ambient direction. **Transcription is authored and formatted exactly like source** — same turn/heading grammar, same speaker-header styling — only its own utterance text renders in the pinned Latin/LTR transcription font instead of the source's font (matching `{start-vocabulary}`'s transcription field).
+
+A title row is authored as a normal row whose source and translation fields are each a bare heading instead of a turn:
+
+```
+# Chapter One
+---
+# Rozdział pierwszy
+===
+```
+
 #### EPUB stylesheets
 
-The models/questions markup needs a matching CSS bundle listed under the project's `stylesheet.common` (`epub-public`'s `src/css/main/{latn,arab,hebr,cjk}/models.css` and `questions.css` are ready-made examples — copy them into your own stylesheet set, or use them directly if your project already pulls from that repo). `cjk` is one shared bundle for Chinese/Japanese/Korean (no per-script `hans`/`hant`/`kore`/`jpan` variants). Example `models.css` (`latn`):
+The models/questions/parallel-dialog markup needs a matching CSS bundle listed under the project's `stylesheet.common` (`epub-public`'s `src/css/main/<script>/` — eleven per-script directories: `latn`, `arab`, `hebr`, `cyrl`, `deva`, `grek`, `thai`, `hans`, `hant`, `kore`, `japn`, each scripted separately including Chinese/Japanese/Korean, with no shared `cjk` bundle — ships `models.css`, `questions.css`, and `parallel-dialog.css` as ready-made examples; copy them into your own stylesheet set, or use them directly if your project already pulls from that repo). Example `models.css` (`latn`):
 
 ```css
 div.models > div.models-item.paired {
@@ -231,7 +272,7 @@ Font <Script> <Extension> <Field> [Strong|Emphasis]
 | Axis | Values |
 |---|---|
 | Script | ISO-15924, Titlecase — `Arab` `Hebr` `Latn` … |
-| Extension | `Text` `Dialog` `Questions` `Vocabulary` `Models` `Parallel` |
+| Extension | `Text` `Dialog` `Questions` `Vocabulary` `Models` `Parallel` `ParallelDialog` |
 | Field | `Source` `Question` `Answer` `Transcription` `Translation` `Grammar` `Phrase` … |
 | Style | `Strong` or `Emphasis` (omitted = regular) |
 
@@ -258,7 +299,7 @@ Declare only the slots you want to override — undeclared names are skipped. A 
 
 **Notes.** A comment/note line — a sentence or phrase alone on a line, wrapped in `(...)` — inside a `dialog`, `questions`, or `models` block (not `vocabulary`) renders as a centered paragraph in the `Notes` role. Declare `Font Notes` to choose its font; when undeclared, notes fall back to the `Emphasis` font.
 
-The ready-made bundles under `epub-public`'s `src/css/main/{arab,hebr,latn}/` show the full pattern — a `font.css` palette plus the per-component CSS chains that spell out these fallback lists.
+The ready-made bundles under `epub-public`'s `src/css/main/<script>/` (all eleven script directories — see the models/questions/parallel-dialog note above) show the full pattern — a `font.css` palette plus the per-component CSS chains that spell out these fallback lists.
 
 ## `scanbook-cli`
 

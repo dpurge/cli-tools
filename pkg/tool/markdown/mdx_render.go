@@ -107,6 +107,7 @@ func (r *mdxNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer)
 	reg.Register(KindParallel, r.renderParallel)
 	reg.Register(KindModels, r.renderModels)
 	reg.Register(KindQuestions, r.renderQuestions)
+	reg.Register(KindParallelDialog, r.renderParallelDialog)
 	// KindText MUST be registered last (highest ordinal, ASR-1 panic-gate).
 	reg.Register(KindText, r.renderTextblock)
 }
@@ -905,6 +906,95 @@ func (r *mdxNodeRenderer) renderParallel(w util.BufWriter, source []byte, node g
 	}
 	io.WriteString(w, fence)
 	io.WriteString(w, "parallel lang=")
+	io.WriteString(w, lang)
+	io.WriteString(w, " script=")
+	io.WriteString(w, script)
+	io.WriteString(w, "\n")
+	io.WriteString(w, content)
+	io.WriteString(w, "\n")
+	io.WriteString(w, fence)
+	io.WriteString(w, "\n\n")
+	r.atLineStart = true
+
+	return gast.WalkContinue, nil
+}
+
+// serializeParallelDialogItem re-serializes one parsed field item back into
+// its original turn/heading source text: a heading re-emits its "#"*level
+// prefix + text (mirrors renderDialog's ItemHeader case); a turn re-emits
+// its marker line ("--:" for an anonymous continuation — Header=="—" is the
+// getDialogItemHeader sentinel, parser.go — or "@"+Header otherwise) followed
+// by Content re-indented 2 spaces per non-blank line, IDENTICAL to
+// renderDialog's ItemData serialization (mdx_render.go, above) — this is the
+// same grammar parseParallelDialogField (parser.go) parses, just run in
+// reverse, so a field round-trips byte-for-byte.
+func serializeParallelDialogItem(item ParallelDialogItem) string {
+	var body strings.Builder
+	if item.Kind == ItemHeader {
+		body.WriteString(strings.Repeat("#", item.Level))
+		body.WriteString(" ")
+		body.WriteString(item.Text)
+		return body.String()
+	}
+	if item.Header == "—" {
+		body.WriteString("--:\n")
+	} else {
+		body.WriteString("@")
+		body.WriteString(item.Header)
+		body.WriteString("\n")
+	}
+	for _, line := range strings.Split(item.Content, "\n") {
+		if line == "" {
+			body.WriteString("\n")
+		} else {
+			body.WriteString("  ")
+			body.WriteString(line)
+			body.WriteString("\n")
+		}
+	}
+	return strings.TrimRight(body.String(), "\n")
+}
+
+// renderParallelDialog emits the `parallel-dialog` fence: rows joined by a
+// lone "===" line; within each row, fields (source, translation, and — only
+// when HasTranscription — transcription) are joined by lone "---" lines,
+// each field serialized via serializeParallelDialogItem. This losslessly
+// mirrors parseParallelDialogRows (parser.go): translation is always present
+// (SPECS: mandatory, unlike plain {start-parallel}), so every row emits at
+// least 2 fields, never 1.
+func (r *mdxNodeRenderer) renderParallelDialog(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*ParallelDialog)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+
+	rowStrs := make([]string, 0, len(n.Rows))
+	for _, row := range n.Rows {
+		fields := []string{
+			serializeParallelDialogItem(row.Source),
+			serializeParallelDialogItem(row.Translation),
+		}
+		if row.HasTranscription {
+			fields = append(fields, serializeParallelDialogItem(row.Transcription))
+		}
+		rowStrs = append(rowStrs, strings.Join(fields, "\n---\n"))
+	}
+	content := strings.Join(rowStrs, "\n===\n")
+	fence := mdxFence(content)
+
+	lang := r.lang
+	if n.Lang != "" {
+		lang = n.Lang
+	}
+	script := r.script
+	if n.Script != "" {
+		script = n.Script
+	}
+	io.WriteString(w, fence)
+	io.WriteString(w, "parallel-dialog lang=")
 	io.WriteString(w, lang)
 	io.WriteString(w, " script=")
 	io.WriteString(w, script)
