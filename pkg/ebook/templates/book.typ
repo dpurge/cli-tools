@@ -555,7 +555,6 @@
   //   new translation inherits book direction).
   block(width: 100%, grid(
     columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em,
-    stroke: (x: 0.5pt + luma(230)),
     align: (start + top, start + top),
     ..rows.pos().map(r => (
       {
@@ -619,7 +618,6 @@
 #let parallel-dialog(source-dir: ltr, script: "", ..rows) = {
   block(width: 100%, grid(
     columns: (1fr, 1fr), column-gutter: 1.2em, row-gutter: 0.5em,
-    stroke: (x: 0.5pt + luma(230)),
     align: (start + top, start + top),
     ..rows.pos().map(r => (
       {
