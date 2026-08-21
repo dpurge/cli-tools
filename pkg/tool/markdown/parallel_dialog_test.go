@@ -261,6 +261,53 @@ func TestParallelDialog_EmptyField_TreatedAsBlankTurn(t *testing.T) {
 	}
 }
 
+// TestParallelDialog_BlankLinesAroundSeparators_NoOp is a regression test
+// for a real-world report: a "---"/"==="-separated field that itself has a
+// blank line right before/after the separator (e.g. because the source was
+// written with a paragraph break for readability) used to error with "field
+// must contain exactly one turn or heading, got 2 item(s)". The extra
+// leading blank line surviving into the next field was buffered before any
+// "@X:" header was seen, and flush() turned it into a spurious zero-content
+// item as soon as the real header arrived. A blank line INSIDE a turn
+// (between two indented content lines, preserved as a paragraph break) was
+// never affected and still isn't.
+func TestParallelDialog_BlankLinesAroundSeparators_NoOp(t *testing.T) {
+	input := "{start-parallel-dialog}\n" +
+		"@Ion:\n" +
+		"  Row1 src line1.\n" +
+		"\n" +
+		"  Row1 src line2.\n" +
+		"\n" +
+		"---\n" +
+		"\n" +
+		"@Jan:\n" +
+		"  Row1 tr.\n" +
+		"\n" +
+		"===\n" +
+		"\n" +
+		"@Ion:\n" +
+		"  Row2 src.\n" +
+		"---\n" +
+		"@Jan:\n" +
+		"  Row2 tr.\n" +
+		"\n" +
+		"{end-parallel-dialog}\n"
+
+	got, err := markdown.ToHTML([]byte(input))
+	if err != nil {
+		t.Fatalf("ToHTML() unexpected error for blank lines around separators: %v", err)
+	}
+	rowCount := strings.Count(string(got), `class="parallel-dialog-row"`)
+	if rowCount != 2 {
+		t.Errorf("expected 2 .parallel-dialog-row divs, got %d", rowCount)
+	}
+	for _, want := range []string{"Row1 src line1.", "Row1 src line2.", "Row1 tr.", "Row2 src.", "Row2 tr."} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("expected output to contain %q", want)
+		}
+	}
+}
+
 // ---------------------------------------------------------------------
 // Typst emission (Go-side dict-string assertions)
 // ---------------------------------------------------------------------

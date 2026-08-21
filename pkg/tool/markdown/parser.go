@@ -575,6 +575,16 @@ func parseParallelDialogRows(inner string) ([]ParallelDialogRow, error) {
 // item is an error: unlike a {start-dialog} block, a parallel-dialog field
 // never holds a run of several turns.
 func parseParallelDialogField(field string) (ParallelDialogItem, error) {
+	// Trim leading/trailing blank lines first, mirroring parseParallelRows's
+	// per-field strings.TrimSpace. Without this, a field that isn't the row's
+	// first (i.e. one following a "---"/"===" separator that itself has a
+	// blank line before it in the source) starts with an empty line. That
+	// empty line gets buffered before any header is seen, and flush() below
+	// turns it into a spurious zero-content item once the real "@X:" header
+	// arrives — tripping the "exactly one item" check a few lines down for
+	// input that is otherwise well-formed (ASR-3).
+	field = strings.TrimSpace(field)
+
 	var items []ParallelDialogItem
 	var buf []string
 	header := ""
