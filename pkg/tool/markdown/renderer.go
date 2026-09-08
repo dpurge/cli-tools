@@ -3,6 +3,7 @@ package markdown
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	gast "github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/renderer"
@@ -486,6 +487,45 @@ func renderQuestions(w util.BufWriter, source []byte, node gast.Node, entering b
 	return gast.WalkContinue, nil
 }
 
+// renderSection emits a `<div class="section">` wrapper: the compulsory H1
+// title, an optional comma-joined author list, and an optional
+// parenthesized year — all centered via CSS, scoped to the block's own
+// lang/script. Mirrors renderDialog's ItemHeader convention: Title/Authors/
+// Year are raw text, never inline-recursed (ASR-4).
+func renderSection(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Section)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+
+	dir := blockDirection(n.Script)
+	io.WriteString(w, badgeOnlyHTML("S"))
+	io.WriteString(w, "<div class=\"section")
+	io.WriteString(w, scriptClass(n.Script))
+	io.WriteString(w, "\" dir=\"")
+	io.WriteString(w, dir)
+	io.WriteString(w, "\">\n")
+	io.WriteString(w, "<h1 class=\"section-title\">")
+	io.WriteString(w, n.Title)
+	io.WriteString(w, "</h1>\n")
+	if len(n.Authors) > 0 {
+		io.WriteString(w, "<p class=\"section-authors\">")
+		io.WriteString(w, strings.Join(n.Authors, ", "))
+		io.WriteString(w, "</p>\n")
+	}
+	if n.Year != "" {
+		io.WriteString(w, "<p class=\"section-year\">")
+		io.WriteString(w, n.Year)
+		io.WriteString(w, "</p>\n")
+	}
+	io.WriteString(w, "</div>\n")
+
+	return gast.WalkContinue, nil
+}
+
 // renderTextblock emits `<div class="<cls>" dir="<dir>">` for the Text block
 // (SPECS §7.1, §9.1, M3). CSS class mapping: as=source → "text",
 // transcription/translation/grammar → their own name (OI-8). Direction rule
@@ -584,4 +624,13 @@ type textHTMLRenderer struct{}
 
 func (r *textHTMLRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(KindText, renderTextblock)
+}
+
+// sectionHTMLRenderer registers the KindSection HTML render func. It is
+// wired into the shared goldmark instance via sectionExtension
+// (extension.go), satisfying ASR-1 for the HTML path.
+type sectionHTMLRenderer struct{}
+
+func (r *sectionHTMLRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(KindSection, renderSection)
 }

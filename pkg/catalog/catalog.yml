@@ -1,0 +1,271 @@
+# catalog.yml is the single declared source of truth for every language,
+# script, and vocabulary grammar tag this tool recognizes. It is embedded
+# into the binary (catalog.go's go:embed), so it is always in sync with the
+# build — the same guarantee pkg/ebook/translations.go's bookStrings catalog
+# documents for the same reason.
+#
+# languages: keyed by ISO 639-3 code (iso3). iso1 is the bare BCP-47/HTML
+# `lang` subtag this code resolves to (some codes intentionally share one
+# iso1 — e.g. ajp/apc/arb are all distinct Arabic varieties that all render
+# as "ar"; ell/grc both render as "el"). cmn and yue are further
+# script-qualified into zh-Hans/zh-Hant by catalog.HTMLLang, mirroring the
+# pre-existing setLanguage/languageInfo special case exactly (SPECS AC7) —
+# their iso1 here ("zh") is the base tag before that qualification.
+#
+# This list reproduces every one of the 32 codes pkg/ebook/exporter.go's
+# languageInfo already recognized, PLUS "heb" (the real ISO 639-3 code for
+# Hebrew): heb was never one of languageInfo's cases and silently fell back
+# to "en" — a documented, deliberately-preserved quirk before this catalog
+# existed. Now that this catalog is the single source of truth (no more
+# reproduce-the-old-switch constraint), that gap is a genuine, disclosed fix,
+# not a preserved quirk.
+languages:
+  - iso3: ajp
+    iso1: ar
+    name: South Levantine Arabic
+  - iso3: apc
+    iso1: ar
+    name: North Levantine Arabic
+  - iso3: arb
+    iso1: ar
+    name: Standard Arabic
+  - iso3: bul
+    iso1: bg
+    name: Bulgarian
+  - iso3: ces
+    iso1: cs
+    name: Czech
+  - iso3: cmn
+    iso1: zh
+    name: Mandarin Chinese
+  - iso3: dan
+    iso1: da
+    name: Danish
+  - iso3: deu
+    iso1: de
+    name: German
+  - iso3: ell
+    iso1: el
+    name: Modern Greek
+  - iso3: fas
+    iso1: fa
+    name: Persian
+  - iso3: fra
+    iso1: fr
+    name: French
+  - iso3: grc
+    iso1: el
+    name: Ancient Greek
+  - iso3: heb
+    iso1: he
+    name: Hebrew
+  - iso3: hin
+    iso1: hi
+    name: Hindi
+  - iso3: ind
+    iso1: id
+    name: Indonesian
+  - iso3: ita
+    iso1: it
+    name: Italian
+  - iso3: kaz
+    iso1: kk
+    name: Kazakh
+  - iso3: lat
+    iso1: la
+    name: Latin
+  - iso3: lit
+    iso1: lt
+    name: Lithuanian
+  - iso3: mon
+    iso1: mn
+    name: Mongolian
+  - iso3: nld
+    iso1: nl
+    name: Dutch
+  - iso3: pol
+    iso1: pl
+    name: Polish
+  - iso3: ron
+    iso1: ro
+    name: Romanian
+  - iso3: spa
+    iso1: es
+    name: Spanish
+  - iso3: srp
+    iso1: sr
+    name: Serbian
+  - iso3: tgk
+    iso1: tg
+    name: Tajik
+  - iso3: tha
+    iso1: th
+    name: Thai
+  - iso3: tur
+    iso1: tr
+    name: Turkish
+  - iso3: uig
+    iso1: ug
+    name: Uyghur
+  - iso3: ukr
+    iso1: uk
+    name: Ukrainian
+  - iso3: uzb
+    iso1: uz
+    name: Uzbek
+  - iso3: vie
+    iso1: vi
+    name: Vietnamese
+  - iso3: yid
+    iso1: yi
+    name: Yiddish
+  - iso3: yue
+    iso1: zh
+    name: Cantonese
+
+# scripts: keyed by ISO 15924 code (iso4). enlarged mirrors the pre-existing
+# largeScriptCodes (pkg/ebook/typst.go): scripts whose synthetic bold/italic
+# renders poorly at base size, so book.typ substitutes a distinct role font
+# at normal weight/style and (at the book level) a larger base size instead.
+# direction mirrors isRtlScript (pkg/tool/markdown/attr.go).
+#
+# This reconciles the one real inconsistency found before this catalog
+# existed: "syrc" was already RTL per isRtlScript and already enlarged per
+# largeScriptCodes, but languageInfo's OWN separate, independent direction
+# switch only recognized arab/hebr as RTL (syrc fell through to its ltr
+# default). Syriac is objectively a right-to-left script, so syrc is RTL
+# here unconditionally — a factual correction, not a new judgment call.
+#
+# "cyrl" (Cyrillic) is the one genuinely new addition (needed by
+# lang-notes/ukr in epub-public): normal size, LTR — it was in neither of
+# the old scattered sets before.
+scripts:
+  - iso4: latn
+    name: Latin
+    enlarged: false
+    direction: ltr
+  - iso4: cyrl
+    name: Cyrillic
+    enlarged: false
+    direction: ltr
+  - iso4: hans
+    name: Han (Simplified)
+    enlarged: true
+    direction: ltr
+  - iso4: hant
+    name: Han (Traditional)
+    enlarged: true
+    direction: ltr
+  - iso4: hani
+    name: Han (script unspecified)
+    enlarged: true
+    direction: ltr
+  - iso4: arab
+    name: Arabic
+    enlarged: true
+    direction: rtl
+  - iso4: hebr
+    name: Hebrew
+    enlarged: true
+    direction: rtl
+  - iso4: kore
+    name: Korean (Hangul + Hanja)
+    enlarged: true
+    direction: ltr
+  - iso4: hang
+    name: Hangul
+    enlarged: true
+    direction: ltr
+  - iso4: jpan
+    name: Japanese (Han + Kana)
+    enlarged: true
+    direction: ltr
+  - iso4: hira
+    name: Hiragana
+    enlarged: true
+    direction: ltr
+  - iso4: kana
+    name: Katakana
+    enlarged: true
+    direction: ltr
+  - iso4: syrc
+    name: Syriac
+    enlarged: true
+    direction: rtl
+
+# tags: vocabulary/models grammar-field tokens (SPECS: {start-vocabulary}'s
+# Grammar field, whitespace-split — each token is declared independently and
+# composed at authoring time, e.g. "{N f sg}" = noun + feminine + singular).
+# This list was derived from every {start-vocabulary} grammar token actually
+# used across epub-public (cli-tools' proving-ground content repo), after
+# migrating cmn-hans/b1/001.md's spelled-out "{N cl ge}" convention to the
+# classifier-character convention 003.md already used in the same project
+# ("{N 个}") — classifiers are declared as the literal Chinese character
+# only, never a romanized/spelled-out form.
+tags:
+  - value: N
+    category: pos
+    meaning: noun
+  - value: V
+    category: pos
+    meaning: verb
+  - value: Adj
+    category: pos
+    meaning: adjective
+  - value: Adv
+    category: pos
+    meaning: adverb
+  - value: Pron
+    category: pos
+    meaning: pronoun
+  - value: Prep
+    category: pos
+    meaning: preposition
+  - value: Conj
+    category: pos
+    meaning: conjunction
+  - value: Num
+    category: pos
+    meaning: numeral
+  - value: f
+    category: gender
+    meaning: feminine
+  - value: m
+    category: gender
+    meaning: masculine
+  - value: n
+    category: gender
+    meaning: neuter
+  - value: sg
+    category: number
+    meaning: singular
+  - value: pl
+    category: number
+    meaning: plural
+  - value: acc
+    category: case
+    meaning: accusative
+  - value: ar
+    category: conjugation
+    meaning: "-ar conjugation class"
+  - value: ir
+    category: conjugation
+    meaning: "-ir conjugation class"
+  - value: er
+    category: conjugation
+    meaning: "-er conjugation class"
+  - value: irreg
+    category: conjugation
+    meaning: irregular
+  - value: 个
+    category: classifier
+    meaning: "gè — general/individual classifier"
+  - value: 种
+    category: classifier
+    meaning: "zhǒng — kind/type classifier"
+  - value: 场
+    category: classifier
+    meaning: "chǎng — event/session classifier"
+  - value: 条
+    category: classifier
+    meaning: "tiáo — long, thin object classifier"

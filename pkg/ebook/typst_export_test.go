@@ -5,13 +5,16 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
+	"github.com/dpurge/cli-tools/pkg/catalog"
 	"github.com/dpurge/cli-tools/pkg/config"
 )
 
-// --- languageInfo (SPECS AC7: reproduce every setLanguage mapping) --------
+// --- languageInfo (backed by pkg/catalog, the single source of truth) ----
 
 func TestLanguageInfoLanguageMapping(t *testing.T) {
 	tests := []struct {
@@ -55,12 +58,12 @@ func TestLanguageInfoLanguageMapping(t *testing.T) {
 		{"yue", "hans", "zh-Hans"},
 		{"yue", "hant", "zh-Hant"},
 		{"yue", "", "zh-Hant"},
-		// Pre-existing quirk (documented in exporter.go's languageInfo
-		// doc comment): the real ISO 639-3 Hebrew code "heb" (used by the
-		// heb sample project) was never one of setLanguage's cases, so it
-		// falls through to the default "en". languageInfo MUST reproduce
-		// this, not fix it.
-		{"heb", "hebr", "en"},
+		// heb: previously a documented quirk (the real ISO 639-3 Hebrew
+		// code "heb", used by the heb sample project, was never one of the
+		// old hand-maintained switch's cases and fell through to "en").
+		// Now that pkg/catalog is the single declared source of truth, this
+		// is a disclosed, intentional fix, not a preserved quirk.
+		{"heb", "hebr", "he"},
 		{"xyz", "", "en"},
 		{"", "", "en"},
 	}
@@ -417,6 +420,58 @@ func TestLargeScript(t *testing.T) {
 			t.Errorf("largeScript(%q) = true, want false", s)
 		}
 	}
+}
+
+// TestBookTemplateLargeScriptsMatchesCatalog guards against book.typ's
+// _largeScripts literal drifting from pkg/catalog.EnlargedScripts().
+//
+// book.typ's _largeScripts stays a plain static Typst literal rather than a
+// value threaded in from Go at build time (mirroring how _fontSlots/
+// _roleFonts already are): _isLargeScript is a bare, non-context function
+// called from inside show-strong/show-emph rules across every custom block
+// (textblock/vocabulary/dialog/parallel/section, 8 call sites total), and
+// Typst closures capture a referenced binding's value at DEFINITION time,
+// not late-bound (verified empirically: a top-level #let redefined AFTER a
+// function that references it does NOT change what that function sees) —
+// so threading a runtime value in would require wrapping every one of
+// those 8 call sites in `context`, a much larger and riskier change for a
+// value that, in practice, never needed new content here (this catalog's
+// one genuinely new script, cyrl, is not enlarged). This test is the
+// chosen alternative: it turns "kept in sync by comment convention" (the
+// pre-existing risk) into "kept in sync by a test that fails on drift",
+// without touching book.typ's rendering internals.
+func TestBookTemplateLargeScriptsMatchesCatalog(t *testing.T) {
+	m := regexp.MustCompile(`_largeScripts\s*=\s*\(([^)]*)\)`).FindStringSubmatch(bookTemplate)
+	if m == nil {
+		t.Fatal("book.typ: could not find _largeScripts literal — has it been renamed or restructured?")
+	}
+
+	quoted := regexp.MustCompile(`"([^"]+)"`).FindAllStringSubmatch(m[1], -1)
+	got := make(map[string]bool, len(quoted))
+	for _, q := range quoted {
+		got[q[1]] = true
+	}
+
+	want := catalog.EnlargedScripts()
+	if len(got) != len(want) {
+		t.Fatalf("book.typ's _largeScripts has %d entries %v, pkg/catalog.EnlargedScripts() has %d entries %v — update whichever fell behind",
+			len(got), sortedKeys(got), len(want), want)
+	}
+	for _, s := range want {
+		if !got[s] {
+			t.Errorf("pkg/catalog declares %q enlarged, but book.typ's _largeScripts literal is missing it", s)
+		}
+	}
+}
+
+// sortedKeys returns m's keys sorted, for a deterministic mismatch message.
+func sortedKeys(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // TestBookTemplateDefaults asserts the embedded book.typ carries the built-in

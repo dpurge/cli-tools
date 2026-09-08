@@ -1,21 +1,23 @@
 // Package markdown converts DPurge project markdown into HTML with goldmark.
 //
 // Besides CommonMark (plus tables, strikethrough, autolinks, definition
-// lists and typographer substitutions), it understands six project-specific
+// lists and typographer substitutions), it understands project-specific
 // block extensions, each delimited by start/end markers that must appear on
 // their own lines:
 //
 //	{start-vocabulary [lang=… script=…]} ... {end-vocabulary}
 //	{start-dialog     [lang=… script=…]} ... {end-dialog}
 //	{start-parallel   [lang=… script=…]} ... {end-parallel}
+//	{start-parallel-dialog [lang=… script=…]} ... {end-parallel-dialog}
 //	{start-models     [lang=… script=…]} ... {end-models}
 //	{start-questions  [lang=… script=…]} ... {end-questions}
+//	{start-section    [lang=… script=…]} ... {end-section}
 //	{start-text as=… [lang=… script=… system=…]} ... {end-text}
 //
 // Parsing (parser.go) captures raw text/structure into nodes (ast.go);
 // rendering (renderer.go) emits HTML, recursively invoking ToHTML to
-// render dialog/parallel/text cell content. See interlinear.go for a
-// seventh, inactive block type.
+// render dialog/parallel/text cell content. See interlinear.go for an
+// inactive block type.
 package markdown
 
 import (
@@ -47,6 +49,7 @@ var md = goldmark.New(
 		parallelDialogExtender,
 		modelsExtender,
 		questionsExtender,
+		sectionExtender,
 		textExtender,
 	),
 	goldmark.WithParserOptions(

@@ -60,6 +60,7 @@ func (r *typstNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegistere
 	reg.Register(KindModels, renderModelsTypst)
 	reg.Register(KindQuestions, renderQuestionsTypst)
 	reg.Register(KindParallelDialog, renderParallelDialogTypst)
+	reg.Register(KindSection, renderSectionTypst)
 	// KindText MUST be registered last (highest ordinal, ASR-1 panic-gate).
 	reg.Register(KindText, renderTextblockTypst)
 }
@@ -728,6 +729,54 @@ func renderModelsTypst(w util.BufWriter, source []byte, node gast.Node, entering
 			io.WriteString(w, escapeTypstString(item.Translation))
 			io.WriteString(w, "\"),\n")
 		}
+	}
+	io.WriteString(w, ")\n\n")
+
+	return gast.WalkContinue, nil
+}
+
+// renderSectionTypst emits `#pagebreak(weak: true)` (so the section never
+// shares a page with whatever precedes it — book.typ's section() only emits
+// the TRAILING pagebreak; see its doc comment for why the leading one must
+// live here, before the badge, verified via `typst compile`), then the "S"
+// badge, then `#section(dir: <dir>, script: "<script>", title: "<title>",
+// authors: ("<a1>", ...), year: <none|"<year>">)`. Section has no markdown
+// children (IsRaw, ast.go), so the entire call is written on the entering
+// pass, mirroring renderVocabularyTypst/renderModelsTypst. A parse-time
+// error (missing/duplicate title, bad year, unrecognized line) stops
+// rendering immediately and surfaces it, mirroring every other custom
+// block's Err handling.
+func renderSectionTypst(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Section)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+
+	dir := blockDirection(n.Script)
+	io.WriteString(w, "#pagebreak(weak: true)\n")
+	io.WriteString(w, badgeOnlyTypst("S"))
+	io.WriteString(w, "#section(dir: ")
+	io.WriteString(w, dir)
+	io.WriteString(w, `, script: "`)
+	io.WriteString(w, escapeTypstString(n.Script))
+	io.WriteString(w, `", title: "`)
+	io.WriteString(w, escapeTypstString(n.Title))
+	io.WriteString(w, `", authors: (`)
+	for _, a := range n.Authors {
+		io.WriteString(w, `"`)
+		io.WriteString(w, escapeTypstString(a))
+		io.WriteString(w, `", `)
+	}
+	io.WriteString(w, "), year: ")
+	if n.Year != "" {
+		io.WriteString(w, `"`)
+		io.WriteString(w, escapeTypstString(n.Year))
+		io.WriteString(w, `"`)
+	} else {
+		io.WriteString(w, "none")
 	}
 	io.WriteString(w, ")\n\n")
 

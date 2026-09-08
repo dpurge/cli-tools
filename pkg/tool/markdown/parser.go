@@ -40,13 +40,16 @@ var (
 
 	startText = []byte("{start-text")
 	endText   = []byte("{end-text}")
+
+	startSection = []byte("{start-section")
+	endSection   = []byte("{end-section}")
 )
 
 // opensRawBlock reports whether the reader is positioned at a line that
 // starts with start AND a matching end marker exists later in the source.
 // When both conditions hold it consumes the start-marker line and returns
 // (markerLine, true); markerLine is the raw line slice (including any
-// trailing \r\n) valid for attribute parsing via parseMarkerAttrs (attr.go).
+// trailing \r\n) valid for attribute parsing via ParseMarkerAttrs (attr.go).
 // When either condition fails it returns (nil, false) leaving the reader
 // position unchanged so the line falls through to ordinary paragraph text.
 //
@@ -114,7 +117,7 @@ func (b *vocabularyParser) Open(parent gast.Node, reader text.Reader, pc parser.
 		return nil, parser.NoChildren
 	}
 	n := &Vocabulary{}
-	attrs, err := parseMarkerAttrs(markerLine, "vocabulary")
+	attrs, err := ParseMarkerAttrs(markerLine, "vocabulary")
 	if err != nil {
 		n.Err = err
 	} else {
@@ -136,23 +139,30 @@ func (b *vocabularyParser) Continue(node gast.Node, reader text.Reader, pc parse
 
 func (b *vocabularyParser) Close(node gast.Node, reader text.Reader, pc parser.Context) {
 	n := node.(*Vocabulary)
-	n.Items = parseVocabularyItems(rawBlockText(node, reader))
+	n.Items = ParseVocabularyItems(rawBlockText(node, reader))
 }
 
 func (b *vocabularyParser) CanInterruptParagraph() bool { return true }
 func (b *vocabularyParser) CanAcceptIndentedLine() bool { return false }
 
-// parseVocabularyItems parses the dedented `{start-vocabulary}` body into
+// ParseVocabularyItems parses the dedented `{start-vocabulary}` body into
 // items. Each non-empty line is parsed tail-to-head, in this order:
 // trailing `= translation`, then trailing `[transcription]`, then trailing
-// `{grammar}`; whatever remains is the phrase.
+// `{grammar}`; whatever remains is the phrase. Exported so pkg/ebook's
+// `ebook validate` command can extract each item's Grammar field and check
+// its whitespace-split tokens against pkg/catalog's declared tags, without
+// duplicating this parsing algorithm — since it treats each line
+// independently (no cross-line state), calling it on a single line is
+// behaviorally identical to calling it on a whole block, which is how the
+// validator recovers accurate per-line source positions.
 //
 // NOTE: a line that becomes the empty string after the `=` split makes the
 // trailing-`]`/`}` checks below index s[len(s)-1:] on an empty string,
 // which panics. This mirrors a pre-existing bug in the ported gomarkdown
 // code (markdown-vocabulary.go) and is deliberately left as-is per the
-// approved migration plan.
-func parseVocabularyItems(inner string) []VocabularyItem {
+// approved migration plan. `ebook validate` guards its own per-line calls
+// with recover() for exactly this reason (validate.go).
+func ParseVocabularyItems(inner string) []VocabularyItem {
 	var items []VocabularyItem
 
 	for _, line := range strings.Split(inner, "\n") {
@@ -207,7 +217,7 @@ func (b *dialogParser) Open(parent gast.Node, reader text.Reader, pc parser.Cont
 		return nil, parser.NoChildren
 	}
 	n := &Dialog{}
-	attrs, err := parseMarkerAttrs(markerLine, "dialog")
+	attrs, err := ParseMarkerAttrs(markerLine, "dialog")
 	if err != nil {
 		n.Err = err
 	} else {
@@ -403,7 +413,7 @@ func (b *parallelParser) Open(parent gast.Node, reader text.Reader, pc parser.Co
 		return nil, parser.NoChildren
 	}
 	n := &Parallel{}
-	attrs, err := parseMarkerAttrs(markerLine, "parallel")
+	attrs, err := ParseMarkerAttrs(markerLine, "parallel")
 	if err != nil {
 		n.Err = err
 	} else {
@@ -489,7 +499,7 @@ func (b *parallelDialogParser) Open(parent gast.Node, reader text.Reader, pc par
 		return nil, parser.NoChildren
 	}
 	n := &ParallelDialog{}
-	attrs, err := parseMarkerAttrs(markerLine, "parallel-dialog")
+	attrs, err := ParseMarkerAttrs(markerLine, "parallel-dialog")
 	if err != nil {
 		n.Err = err
 	} else {
@@ -650,7 +660,7 @@ func (b *modelsParser) Open(parent gast.Node, reader text.Reader, pc parser.Cont
 		return nil, parser.NoChildren
 	}
 	n := &Models{}
-	attrs, err := parseMarkerAttrs(markerLine, "models")
+	attrs, err := ParseMarkerAttrs(markerLine, "models")
 	if err != nil {
 		n.Err = err
 	} else {
@@ -745,7 +755,7 @@ func (b *questionsParser) Open(parent gast.Node, reader text.Reader, pc parser.C
 		return nil, parser.NoChildren
 	}
 	n := &Questions{}
-	attrs, err := parseMarkerAttrs(markerLine, "questions")
+	attrs, err := ParseMarkerAttrs(markerLine, "questions")
 	if err != nil {
 		n.Err = err
 	} else {
@@ -799,7 +809,7 @@ func (b *textParser) Open(parent gast.Node, reader text.Reader, pc parser.Contex
 		return nil, parser.NoChildren
 	}
 	n := &Text{}
-	attrs, err := parseMarkerAttrs(markerLine, "text")
+	attrs, err := ParseMarkerAttrs(markerLine, "text")
 	if err != nil {
 		n.Err = err
 	} else {
@@ -828,6 +838,116 @@ func (b *textParser) Close(node gast.Node, reader text.Reader, pc parser.Context
 
 func (b *textParser) CanInterruptParagraph() bool { return true }
 func (b *textParser) CanAcceptIndentedLine() bool { return false }
+
+// ---------------------------------------------------------------------
+// Section
+// ---------------------------------------------------------------------
+
+type sectionParser struct{}
+
+func newSectionParser() parser.BlockParser { return &sectionParser{} }
+
+func (b *sectionParser) Trigger() []byte { return []byte{'{'} }
+
+// Open parses the {start-section lang=... script=...} marker and returns a
+// Section node. as=/system= are not applicable (a section has no field
+// languages to carry them), mirroring Parallel/Models' as= rejection.
+func (b *sectionParser) Open(parent gast.Node, reader text.Reader, pc parser.Context) (gast.Node, parser.State) {
+	markerLine, ok := opensRawBlock(reader, startSection, endSection)
+	if !ok {
+		return nil, parser.NoChildren
+	}
+	n := &Section{}
+	attrs, err := ParseMarkerAttrs(markerLine, "section")
+	if err != nil {
+		n.Err = err
+	} else {
+		if attrs.As != "" {
+			n.Err = fmt.Errorf("as= not applicable to {start-section}: it has no field languages")
+		}
+		n.Lang = attrs.Lang
+		n.Script = attrs.Script
+	}
+	return n, parser.NoChildren
+}
+
+func (b *sectionParser) Continue(node gast.Node, reader text.Reader, pc parser.Context) parser.State {
+	return continueRawBlock(node, reader, endSection)
+}
+
+func (b *sectionParser) Close(node gast.Node, reader text.Reader, pc parser.Context) {
+	n := node.(*Section)
+	title, authors, year, err := parseSectionBody(rawBlockText(node, reader))
+	n.Title = title
+	n.Authors = authors
+	n.Year = year
+	// Preserve an Open-time error (malformed attribute, or the as= rejection
+	// above), mirroring Dialog.Close/ParallelDialog.Close's identical
+	// precedence rule.
+	if n.Err == nil {
+		n.Err = err
+	}
+}
+
+func (b *sectionParser) CanInterruptParagraph() bool { return true }
+func (b *sectionParser) CanAcceptIndentedLine() bool { return false }
+
+// parseSectionBody parses the dedented `{start-section}` body into its
+// title (compulsory level-1 heading), authors (optional "- Name"/"* Name"/
+// "+ Name" list, one per line) and year (optional lone "(YYYY)" line,
+// digits only, reusing isBlockNote's paren-stripping). Any other non-blank
+// line, a non-level-1 heading, or a second title/year line is a grammar
+// error: a section block holds only these three elements.
+func parseSectionBody(inner string) (title string, authors []string, year string, err error) {
+	titleSet := false
+
+	for _, line := range strings.Split(inner, "\n") {
+		s := strings.TrimSpace(line)
+		if s == "" {
+			continue
+		}
+
+		if level, text, ok := isBlockHeader(s); ok {
+			if level != 1 {
+				return "", nil, "", fmt.Errorf("section title must be a level-1 heading, got level %d: %q", level, s)
+			}
+			if titleSet {
+				return "", nil, "", fmt.Errorf("section block has more than one title: %q", s)
+			}
+			title = text
+			titleSet = true
+			continue
+		}
+
+		if len(s) > 2 && (s[0] == '-' || s[0] == '*' || s[0] == '+') && s[1] == ' ' {
+			authors = append(authors, strings.TrimSpace(s[2:]))
+			continue
+		}
+
+		if text, ok := isBlockNote(s); ok {
+			if year != "" {
+				return "", nil, "", fmt.Errorf("section block has more than one year: %q", s)
+			}
+			if text == "" {
+				return "", nil, "", fmt.Errorf("section year must be numeric, got %q", text)
+			}
+			for _, r := range text {
+				if r < '0' || r > '9' {
+					return "", nil, "", fmt.Errorf("section year must be numeric, got %q", text)
+				}
+			}
+			year = text
+			continue
+		}
+
+		return "", nil, "", fmt.Errorf("unrecognized line in section block: %q", s)
+	}
+
+	if !titleSet {
+		return "", nil, "", fmt.Errorf("section block is missing its compulsory title (a level-1 heading)")
+	}
+	return title, authors, year, nil
+}
 
 // parseQuestionsItems splits each dedented `{start-questions}` line at the
 // FIRST " = " (space-delimited) occurrence into question/answer: an answer

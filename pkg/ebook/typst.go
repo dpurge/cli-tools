@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/dpurge/cli-tools/pkg/catalog"
 	"github.com/dpurge/cli-tools/pkg/config"
 	"github.com/dpurge/cli-tools/pkg/tool"
 	"github.com/dpurge/cli-tools/pkg/tool/markdown"
@@ -595,26 +596,15 @@ func typstFontFamilies(typstPath string) (map[string]bool, error) {
 	return families, nil
 }
 
-// largeScriptCodes is the set of ISO 15924 script codes (lowercase) that select
-// book.typ's enlarged body size, including syllabary aliases.
-var largeScriptCodes = map[string]bool{
-	"hans": true, // Chinese, simplified Han
-	"hant": true, // Chinese, traditional Han
-	"hani": true, // Han (script unspecified)
-	"arab": true, // Arabic
-	"hebr": true, // Hebrew
-	"kore": true, // Korean (Hangul + Hanja)
-	"hang": true, // Hangul
-	"jpan": true, // Japanese (Han + Kana)
-	"hira": true, // Hiragana
-	"kana": true, // Katakana
-	"syrc": true, // Syriac
-}
-
 // largeScript reports whether an ISO 15924 script code selects book.typ's
-// enlarged body size. Matching is case-insensitive and whitespace-tolerant.
+// enlarged body size, by consulting pkg/catalog — the single declared
+// source of truth (previously this was its own hand-maintained set,
+// largeScriptCodes, mirrored by hand in book.typ's _largeScripts literal;
+// see pkg/catalog's package doc for the full history). Matching is
+// case-insensitive and whitespace-tolerant (catalog.IsEnlarged's own
+// normalization).
 func largeScript(script string) bool {
-	return largeScriptCodes[strings.ToLower(strings.TrimSpace(script))]
+	return catalog.IsEnlarged(script)
 }
 
 // typstAssetPath converts an absolute filesystem path into a Typst root-relative

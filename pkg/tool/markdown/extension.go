@@ -82,6 +82,22 @@ func (e *questionsExtension) Extend(m goldmark.Markdown) {
 	))
 }
 
+// sectionExtension registers the section block parser and its HTML node
+// renderer. Priority 145 — after questionsExtension (140), before
+// textExtension (150). The Typst and MDX renderers register KindSection
+// directly in their own RegisterFuncs (typst_render.go / mdx_render.go) to
+// satisfy ASR-1 (panic-gate).
+type sectionExtension struct{}
+
+func (e *sectionExtension) Extend(m goldmark.Markdown) {
+	m.Parser().AddOptions(parser.WithBlockParsers(
+		util.Prioritized(newSectionParser(), 145),
+	))
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(
+		util.Prioritized(&sectionHTMLRenderer{}, 145),
+	))
+}
+
 // textExtension registers the text block parser and its HTML node renderer.
 // Priority 150 — after questionsExtension (140). The Typst and MDX
 // renderers register KindText directly in their own RegisterFuncs
@@ -106,5 +122,6 @@ var (
 	parallelDialogExtender goldmark.Extender = &parallelDialogExtension{}
 	modelsExtender         goldmark.Extender = &modelsExtension{}
 	questionsExtender      goldmark.Extender = &questionsExtension{}
+	sectionExtender        goldmark.Extender = &sectionExtension{}
 	textExtender           goldmark.Extender = &textExtension{}
 )

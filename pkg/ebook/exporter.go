@@ -3,6 +3,8 @@ package ebook
 import (
 	"path/filepath"
 	"strings"
+
+	"github.com/dpurge/cli-tools/pkg/catalog"
 )
 
 // baseOutputName strips the extension from a project Filename to obtain a
@@ -86,101 +88,23 @@ func WalkTexts(text [][]string) []ProjectItem {
 
 // languageInfo maps an EBookProject's ISO 639-3 Language code and ISO 15924
 // Script code to a BCP-47-ish language tag and a paragraph direction ("ltr"
-// or "rtl"). It reproduces, verbatim, every case of the pre-refactor
-// setLanguage (epub.go) — including its one quirk: "heb" (the real ISO
-// 639-3 code for Hebrew, used by the heb sample project) is NOT one of the
-// handled cases and therefore falls through to the default "en", exactly as
-// it did before this refactor. That quirk is pre-existing and out of scope
-// to fix here (SPECS AC7 requires reproducing setLanguage, not correcting
-// it).
+// or "rtl"), by consulting pkg/catalog — the single declared source of
+// truth for languages/scripts (previously this was its own independent,
+// hand-maintained switch statement, one of several scattered, inconsistent
+// closed sets; see pkg/catalog's package doc for the full history).
+//
+// This function's signature and every call site are unchanged; only the
+// body now defers to catalog.HTMLLang/catalog.Direction. One behavior
+// change is intentional and disclosed: "heb" (the real ISO 639-3 code for
+// Hebrew, used by the heb sample project) was never a case in the old
+// switch and silently fell through to "en" — a documented, deliberately
+// preserved quirk before pkg/catalog existed. Now that the catalog is the
+// single source of truth (no more reproduce-the-old-switch constraint),
+// heb correctly resolves to "he".
 //
 // Both exporters (epubExporter, typstExporter) call this single function,
 // so the EPUB and PDF outputs of the same project always agree on
 // language/direction.
 func languageInfo(language, script string) (lang, dir string) {
-	switch language {
-	case "ajp", "apc", "arb":
-		lang = "ar"
-	case "bul":
-		lang = "bg"
-	case "ces":
-		lang = "cs"
-	case "cmn":
-		if script == "hant" {
-			lang = "zh-Hant"
-		} else {
-			lang = "zh-Hans"
-		}
-	case "dan":
-		lang = "da"
-	case "deu":
-		lang = "de"
-	case "ell":
-		lang = "el"
-	case "fas":
-		lang = "fa"
-	case "fra":
-		lang = "fr"
-	case "grc":
-		lang = "el"
-	case "hin":
-		lang = "hi"
-	case "ind":
-		lang = "id"
-	case "ita":
-		lang = "it"
-	case "kaz":
-		lang = "kk"
-	case "lat":
-		lang = "la"
-	case "lit":
-		lang = "lt"
-	case "mon":
-		lang = "mn"
-	case "nld":
-		lang = "nl"
-	case "pol":
-		lang = "pl"
-	case "ron":
-		lang = "ro"
-	case "spa":
-		lang = "es"
-	case "srp":
-		lang = "sr"
-	case "tgk":
-		lang = "tg"
-	case "tha":
-		lang = "th"
-	case "tur":
-		lang = "tr"
-	case "uig":
-		lang = "ug"
-	case "ukr":
-		lang = "uk"
-	case "uzb":
-		lang = "uz"
-	case "vie":
-		lang = "vi"
-	case "yid":
-		lang = "yi"
-	case "yue":
-		if script == "hans" {
-			lang = "zh-Hans"
-		} else {
-			lang = "zh-Hant"
-		}
-	default:
-		lang = "en"
-	}
-
-	switch script {
-	case "arab":
-		dir = "rtl"
-	case "hebr":
-		dir = "rtl"
-	default:
-		dir = "ltr"
-	}
-
-	return lang, dir
+	return catalog.HTMLLang(language, script), catalog.Direction(script)
 }

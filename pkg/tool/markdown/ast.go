@@ -20,6 +20,7 @@ var (
 	KindModels         = gast.NewNodeKind("Models")
 	KindQuestions      = gast.NewNodeKind("Questions")
 	KindParallelDialog = gast.NewNodeKind("ParallelDialog")
+	KindSection        = gast.NewNodeKind("Section")
 	KindText           = gast.NewNodeKind("Text") // MUST be last; highest ordinal (ASR-1)
 )
 
@@ -265,6 +266,35 @@ func (n *Questions) IsRaw() bool { return true }
 
 // Dump implements ast.Node.
 func (n *Questions) Dump(source []byte, level int) {
+	gast.DumpHelper(n, source, level, nil, nil)
+}
+
+// Section is the block node for a `{start-section lang=... script=...}` ...
+// `{end-section}` block: a compulsory H1 title, an optional "- Author"
+// list (rendered comma-separated), and an optional lone "(YYYY)" year
+// line — all centered and rendered on their own page, in the block's own
+// lang/script. Lang and Script are populated from marker attributes (M1);
+// Err is set when marker attributes are malformed, when the title is
+// missing or duplicated, when the year is non-numeric or duplicated, or
+// when a line matches none of the three shapes.
+type Section struct {
+	gast.BaseBlock
+
+	Lang, Script string
+	Title        string
+	Authors      []string
+	Year         string
+	Err          error
+}
+
+// Kind implements ast.Node.
+func (n *Section) Kind() gast.NodeKind { return KindSection }
+
+// IsRaw marks the block as raw; see Vocabulary.IsRaw.
+func (n *Section) IsRaw() bool { return true }
+
+// Dump implements ast.Node.
+func (n *Section) Dump(source []byte, level int) {
 	gast.DumpHelper(n, source, level, nil, nil)
 }
 

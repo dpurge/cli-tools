@@ -48,7 +48,7 @@ func TestToHTML_BadDialogIndentation_ReturnsError(t *testing.T) {
 
 // TestVocabulary_EmptyPhraseAfterEqualsSplit_DocumentsPreservedPanic
 // documents (does NOT fix) a pre-existing bug carried over from the ported
-// gomarkdown code (see parser.go parseVocabularyItems): a vocabulary line
+// gomarkdown code (see parser.go ParseVocabularyItems): a vocabulary line
 // that reduces to the empty string after the "= translation" split (e.g.
 // "= foo") causes an out-of-range slice index and panics. This is a
 // deliberately preserved divergence per the approved migration spec, not a

@@ -26,10 +26,19 @@
 // never the book's) — #_resolveFont deliberately never reads this state.
 #let _bookScript = state("book-script", "")
 
-// largeScriptCodes mirror (typst.go's largeScriptCodes, kept in sync by
-// hand — a small, rarely-changing closed set): scripts whose synthetic
-// bold/italic renders poorly, so strong/emph substitute a distinct role
-// font at normal weight/style instead (SPECS §8.4).
+// pkg/catalog.EnlargedScripts() mirror: scripts whose synthetic bold/italic
+// renders poorly, so strong/emph substitute a distinct role font at normal
+// weight/style instead (SPECS §8.4). pkg/catalog (not typst.go's
+// largeScriptCodes, since retired) is now the single declared source of
+// truth for this set; this literal stays a static, hand-kept mirror rather
+// than a Go-injected runtime value — _isLargeScript is a bare, non-context
+// function called from 8 show-strong/show-emph call sites across every
+// custom block, and Typst closures capture a referenced binding's value at
+// DEFINITION time (verified empirically), so threading a live value in
+// would require wrapping every one of those call sites in `context`, for a
+// set that in practice never needed new content here. pkg/ebook's
+// TestBookTemplateLargeScriptsMatchesCatalog (typst_export_test.go) fails
+// the build if this literal ever drifts from pkg/catalog.EnlargedScripts().
 #let _largeScripts = (
   "hans", "hant", "hani", "arab", "hebr", "kore", "hang", "jpan", "hira", "kana", "syrc",
 )
@@ -629,6 +638,43 @@
       dialog(dir: none, script: script, role: "translation", ext: "parallel-dialog", r.at("translation")),
     )).flatten()
   ))
+}
+
+// section() renders a {start-section} block's title/authors/year on their
+// own dedicated page: mirrors book()'s own title-page layout below
+// (align(center + horizon), par(justify: false)/text(hyphenate: false)) but
+// resolves its OWN family per the block's script (ext: "section", field:
+// "header") rather than inheriting the book's ambient font, since a section
+// may be authored in a different language/script than the book itself.
+// Title reuses dialog()'s large-script-aware bold-header gate (field:
+// "header", style: "strong" for a large script, else weight: "bold");
+// authors/year share the same Header-role family at regular weight — no
+// gate needed, they carry no emphasis. Only the TRAILING hard pagebreak
+// lives here (so whatever comes next always starts a fresh page); the
+// LEADING weak pagebreak is emitted by the Go renderer (typst_render.go)
+// before its content-type badge, not here — the badge is a separate Typst
+// call preceding this one (mirroring every other block's badge/content
+// emission order), so a pagebreak inside section() itself would strand the
+// badge alone on the page before it, verified via `typst compile`.
+#let section(dir: ltr, script: "", title: "", authors: (), year: none) = {
+  set par(justify: false)
+  set text(hyphenate: false, dir: dir)
+  align(center + horizon, {
+    if _isLargeScript(script) {
+      context text(size: 1.7em, font: _resolveFont(script: script, ext: "section", field: "header", style: "strong"), weight: "regular", title)
+    } else {
+      context text(size: 1.7em, font: _resolveFont(script: script, ext: "section", field: "header"), weight: "bold", title)
+    }
+    if authors.len() > 0 {
+      v(1.2em)
+      context text(size: 1.2em, font: _resolveFont(script: script, ext: "section", field: "header"), authors.join(", "))
+    }
+    if year != none and year != "" {
+      v(1em)
+      context text(size: 1em, font: _resolveFont(script: script, ext: "section", field: "header"), "(" + year + ")")
+    }
+  })
+  pagebreak()
 }
 
 #let book(

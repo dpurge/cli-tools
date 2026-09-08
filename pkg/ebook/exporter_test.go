@@ -6,11 +6,12 @@ import "testing"
 // languageInfo("pol", ...) must return lang="pl" after the T1 fix.
 //
 // A small set of pre-existing cases are included as regression anchors so
-// that a merge that accidentally shifts the switch order is caught here as
+// that a catalog edit accidentally dropping an entry is caught here as
 // well as in the comprehensive TestLanguageInfoLanguageMapping (typst_export_test.go).
 // The table deliberately does NOT enumerate every case — only the new case,
-// its alphabetic neighbours in the switch, one RTL anchor, and the two
-// documented edge cases (default fallthrough, pre-existing heb quirk).
+// its alphabetic neighbours, one RTL anchor, the unknown-language fallback,
+// and heb (once a documented quirk falling through to "en"; now fixed —
+// see this file's heb case comment).
 // TestBaseOutputName is the table-driven regression test for the shared
 // base-name derivation helper (FR-1, FR-2 basis). Three cases cover every
 // branch of baseOutputName:
@@ -58,10 +59,13 @@ func TestLanguageInfoFR1PolMapping(t *testing.T) {
 		// Default fallthrough — unknown language must still yield "en"/"ltr":
 		{"xyz", "latn", "en", "ltr"},
 
-		// Pre-existing heb quirk: "heb" is NOT in the switch (documented in
-		// exporter.go), so it falls to "en". Direction comes from script "hebr"
-		// → "rtl". This must stay as-is (out of scope, NFR-1).
-		{"heb", "hebr", "en", "rtl"},
+		// heb: previously fell through to "en" (a documented, deliberately
+		// preserved quirk — "heb" was never a case in the old hand-maintained
+		// switch). Now that pkg/catalog is the single source of truth for
+		// languages/scripts, this is a disclosed, intentional fix, not a
+		// preserved quirk: heb correctly resolves to "he". Direction is
+		// unchanged — it comes from script "hebr" → "rtl" either way.
+		{"heb", "hebr", "he", "rtl"},
 	}
 
 	for _, tt := range tests {

@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"fmt"
 	"strings"
+
+	"github.com/dpurge/cli-tools/pkg/catalog"
 )
 
-// blockAttrs holds the parsed attributes from a {start-X ...} marker line.
+// BlockAttrs holds the parsed attributes from a {start-X ...} marker line.
 // All fields are empty strings when the corresponding attribute is absent.
-type blockAttrs struct {
+type BlockAttrs struct {
 	Lang, Script, As, System string
 }
 
-// parseMarkerAttrs parses the attribute string from a {start-blockName ...}
+// ParseMarkerAttrs parses the attribute string from a {start-blockName ...}
 // marker line. markerLine is the raw line bytes as returned by the goldmark
 // reader (may include a trailing \r or \n; stripped automatically — ASR-2
 // belt-and-suspenders). blockName is the expected block name ("vocabulary",
@@ -32,13 +34,13 @@ type blockAttrs struct {
 //   - unknown as value (not source/transcription/translation/grammar) → error
 //   - unknown script                                 → NOT an error (LTR
 //     fallback; isRtlScript handles it in M2)
-func parseMarkerAttrs(markerLine []byte, blockName string) (blockAttrs, error) {
+func ParseMarkerAttrs(markerLine []byte, blockName string) (BlockAttrs, error) {
 	// Tolerate trailing \r or \n (CRLF belt-and-suspenders, ASR-2).
 	markerLine = bytes.TrimRight(markerLine, "\r\n")
 
 	prefix := []byte("{start-" + blockName)
 	if !bytes.HasPrefix(markerLine, prefix) {
-		return blockAttrs{}, fmt.Errorf("not a {start-%s} marker: %q", blockName, markerLine)
+		return BlockAttrs{}, fmt.Errorf("not a {start-%s} marker: %q", blockName, markerLine)
 	}
 
 	// Extract the attribute section: everything after the prefix, stripping
@@ -50,10 +52,10 @@ func parseMarkerAttrs(markerLine []byte, blockName string) (blockAttrs, error) {
 	}
 	attrStr := strings.TrimSpace(string(rest))
 	if attrStr == "" {
-		return blockAttrs{}, nil // bare marker — no attributes
+		return BlockAttrs{}, nil // bare marker — no attributes
 	}
 
-	var attrs blockAttrs
+	var attrs BlockAttrs
 	s := attrStr
 	for s != "" {
 		s = strings.TrimLeft(s, " \t")
@@ -64,7 +66,7 @@ func parseMarkerAttrs(markerLine []byte, blockName string) (blockAttrs, error) {
 		// Find the '=' separator for this attr.
 		eq := strings.IndexByte(s, '=')
 		if eq == -1 {
-			return blockAttrs{}, fmt.Errorf("malformed attribute (no '=') near %q in {start-%s}", s, blockName)
+			return BlockAttrs{}, fmt.Errorf("malformed attribute (no '=') near %q in {start-%s}", s, blockName)
 		}
 
 		key := strings.TrimRight(s[:eq], " \t")
@@ -75,7 +77,7 @@ func parseMarkerAttrs(markerLine []byte, blockName string) (blockAttrs, error) {
 		if len(s) > 0 && s[0] == '"' {
 			end := strings.IndexByte(s[1:], '"')
 			if end == -1 {
-				return blockAttrs{}, fmt.Errorf("unterminated quoted value in {start-%s}: %q", blockName, attrStr)
+				return BlockAttrs{}, fmt.Errorf("unterminated quoted value in {start-%s}: %q", blockName, attrStr)
 			}
 			value = s[1 : end+1]
 			s = s[end+2:]
@@ -101,27 +103,26 @@ func parseMarkerAttrs(markerLine []byte, blockName string) (blockAttrs, error) {
 			case "source", "transcription", "translation", "grammar":
 				attrs.As = value
 			default:
-				return blockAttrs{}, fmt.Errorf("unknown as=%q in {start-%s}: must be source|transcription|translation|grammar", value, blockName)
+				return BlockAttrs{}, fmt.Errorf("unknown as=%q in {start-%s}: must be source|transcription|translation|grammar", value, blockName)
 			}
 		case "system":
 			attrs.System = value
 		default:
-			return blockAttrs{}, fmt.Errorf("unknown attribute %q on {start-%s}", key, blockName)
+			return BlockAttrs{}, fmt.Errorf("unknown attribute %q on {start-%s}", key, blockName)
 		}
 	}
 	return attrs, nil
 }
 
-// isRtlScript reports whether script (a lowercase ISO-15924 code) belongs to
-// the RTL set {arab, hebr, syrc} per SPECS §5 and D9. Unknown scripts return
-// false (LTR fallback), consistent with phraseforge's normalizeScript +
-// getBodyDirection behavior (shared.tsx:151-161,192-215).
+// isRtlScript reports whether script (an ISO-15924 code) is declared
+// right-to-left in pkg/catalog — the single source of truth shared with
+// pkg/ebook's language/direction resolution (previously this was its own
+// independent {arab, hebr, syrc} switch, one of several scattered,
+// inconsistent closed sets). Unknown scripts return false (LTR fallback,
+// pkg/catalog's own convention), consistent with phraseforge's
+// normalizeScript + getBodyDirection behavior (shared.tsx:151-161,192-215).
 func isRtlScript(script string) bool {
-	switch script {
-	case "arab", "hebr", "syrc":
-		return true
-	}
-	return false
+	return catalog.IsRTL(script)
 }
 
 // blockDirection returns "rtl" for RTL scripts and "ltr" for all others

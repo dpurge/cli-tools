@@ -4,90 +4,91 @@ import "testing"
 
 // TestParseMarkerAttrs covers the attribute grammar per SPECS §4 / §11.3.
 // Table categories: happy-path (valid attrs), edge (boundary/CRLF/bare),
-// error (malformed/unknown). The test is white-box (package markdown) so it
-// can access the unexported parseMarkerAttrs and blockAttrs directly.
+// error (malformed/unknown). ParseMarkerAttrs/BlockAttrs are exported (used
+// by pkg/ebook's `ebook validate` command to check lang=/script= attribute
+// values against pkg/catalog without duplicating this parsing logic).
 func TestParseMarkerAttrs(t *testing.T) {
 	tests := []struct {
 		name      string
 		line      string
 		blockName string
 		wantErr   bool
-		wantAttrs blockAttrs
+		wantAttrs BlockAttrs
 	}{
 		// ---------- happy-path ----------
 		{
 			name:      "script unquoted",
 			line:      "{start-text script=arab}",
 			blockName: "text",
-			wantAttrs: blockAttrs{Script: "arab"},
+			wantAttrs: BlockAttrs{Script: "arab"},
 		},
 		{
 			name:      "script quoted",
 			line:      `{start-text script="arab"}`,
 			blockName: "text",
-			wantAttrs: blockAttrs{Script: "arab"},
+			wantAttrs: BlockAttrs{Script: "arab"},
 		},
 		{
 			name:      "lang and script",
 			line:      "{start-text lang=arb script=arab}",
 			blockName: "text",
-			wantAttrs: blockAttrs{Lang: "arb", Script: "arab"},
+			wantAttrs: BlockAttrs{Lang: "arb", Script: "arab"},
 		},
 		{
 			name:      "as and system with spaces",
 			line:      `{start-text as=transcription system="DIN 31635"}`,
 			blockName: "text",
-			wantAttrs: blockAttrs{As: "transcription", System: "DIN 31635"},
+			wantAttrs: BlockAttrs{As: "transcription", System: "DIN 31635"},
 		},
 		{
 			name:      "all four valid as values - source",
 			line:      "{start-text as=source}",
 			blockName: "text",
-			wantAttrs: blockAttrs{As: "source"},
+			wantAttrs: BlockAttrs{As: "source"},
 		},
 		{
 			name:      "all four valid as values - translation",
 			line:      "{start-text as=translation}",
 			blockName: "text",
-			wantAttrs: blockAttrs{As: "translation"},
+			wantAttrs: BlockAttrs{As: "translation"},
 		},
 		{
 			name:      "all four valid as values - grammar",
 			line:      "{start-text as=grammar}",
 			blockName: "text",
-			wantAttrs: blockAttrs{As: "grammar"},
+			wantAttrs: BlockAttrs{As: "grammar"},
 		},
 		{
 			name:      "non-text block with lang and script",
 			line:      "{start-vocabulary lang=arb script=arab}",
 			blockName: "vocabulary",
-			wantAttrs: blockAttrs{Lang: "arb", Script: "arab"},
+			wantAttrs: BlockAttrs{Lang: "arb", Script: "arab"},
 		},
 		// ---------- edge ----------
 		{
 			name:      "bare marker — no attrs",
 			line:      "{start-text}",
 			blockName: "text",
-			wantAttrs: blockAttrs{},
+			wantAttrs: BlockAttrs{},
 		},
 		{
 			name:      "trailing \\r stripped (CRLF belt-and-suspenders)",
 			line:      "{start-text script=arab}\r",
 			blockName: "text",
-			wantAttrs: blockAttrs{Script: "arab"},
+			wantAttrs: BlockAttrs{Script: "arab"},
 		},
 		{
 			name:      "trailing \\r\\n stripped",
 			line:      "{start-text script=arab}\r\n",
 			blockName: "text",
-			wantAttrs: blockAttrs{Script: "arab"},
+			wantAttrs: BlockAttrs{Script: "arab"},
 		},
 		{
 			name:      "unknown script is NOT an error (LTR fallback, OI-6)",
 			line:      "{start-text script=khmr}",
 			blockName: "text",
 			wantErr:   false,
-			wantAttrs: blockAttrs{Script: "khmr"},
+			wantAttrs: BlockAttrs{Script: "khmr"},
 		},
 		// ---------- error ----------
 		{
@@ -118,7 +119,7 @@ func TestParseMarkerAttrs(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			attrs, err := parseMarkerAttrs([]byte(tc.line), tc.blockName)
+			attrs, err := ParseMarkerAttrs([]byte(tc.line), tc.blockName)
 			if tc.wantErr {
 				if err == nil {
 					t.Fatalf("expected error for %q, got nil", tc.line)
@@ -129,7 +130,7 @@ func TestParseMarkerAttrs(t *testing.T) {
 				t.Fatalf("unexpected error for %q: %v", tc.line, err)
 			}
 			if attrs != tc.wantAttrs {
-				t.Fatalf("parseMarkerAttrs(%q, %q)\n got: %+v\nwant: %+v", tc.line, tc.blockName, attrs, tc.wantAttrs)
+				t.Fatalf("ParseMarkerAttrs(%q, %q)\n got: %+v\nwant: %+v", tc.line, tc.blockName, attrs, tc.wantAttrs)
 			}
 		})
 	}

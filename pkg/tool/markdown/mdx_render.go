@@ -108,6 +108,7 @@ func (r *mdxNodeRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer)
 	reg.Register(KindModels, r.renderModels)
 	reg.Register(KindQuestions, r.renderQuestions)
 	reg.Register(KindParallelDialog, r.renderParallelDialog)
+	reg.Register(KindSection, r.renderSection)
 	// KindText MUST be registered last (highest ordinal, ASR-1 panic-gate).
 	reg.Register(KindText, r.renderTextblock)
 }
@@ -706,7 +707,7 @@ func (r *mdxNodeRenderer) renderDefinitionDescription(w util.BufWriter, source [
 // round-trips phraseforge's StructuredBody.parseStructuredEntry (splits
 // translation at the first " = "/"=", extracts the first "{...}" as
 // grammar and the LAST "[...]" as transcription): our field order plus
-// our OWN parser's tail-to-head split (parser.go's parseVocabularyItems)
+// our OWN parser's tail-to-head split (parser.go's ParseVocabularyItems)
 // invert exactly for the common case. Vocabulary has no markdown children
 // (IsRaw, ast.go), so the entire fence is written on the entering call,
 // mirroring renderVocabulary (renderer.go) and renderVocabularyTypst
@@ -1136,6 +1137,67 @@ func (r *mdxNodeRenderer) renderQuestions(w util.BufWriter, source []byte, node 
 	}
 	io.WriteString(w, fence)
 	io.WriteString(w, "questions lang=")
+	io.WriteString(w, lang)
+	io.WriteString(w, " script=")
+	io.WriteString(w, script)
+	io.WriteString(w, "\n")
+	io.WriteString(w, content)
+	io.WriteString(w, "\n")
+	io.WriteString(w, fence)
+	io.WriteString(w, "\n\n")
+	r.atLineStart = true
+
+	return gast.WalkContinue, nil
+}
+
+// renderSection emits the `section` fence (mirrors renderVocabulary/
+// renderModels): re-serializes Title (as "# Title"), Authors (each its own
+// "- Name" line) and Year (as "(YYYY)") back into the exact grammar
+// parseSectionBody (parser.go) parses, so the block round-trips losslessly.
+// Section has no markdown children (IsRaw, ast.go), so the entire fence is
+// written on the entering call. Fence content is LITERAL — never escaped
+// (mirrors renderVocabulary/renderModels) — only the fence delimiter itself
+// is widened (mdxFence) past any backtick run the content might contain.
+func (r *mdxNodeRenderer) renderSection(w util.BufWriter, source []byte, node gast.Node, entering bool) (gast.WalkStatus, error) {
+	if !entering {
+		return gast.WalkContinue, nil
+	}
+	n := node.(*Section)
+	if n.Err != nil {
+		return gast.WalkStop, n.Err
+	}
+
+	var body strings.Builder
+	body.WriteString("# ")
+	body.WriteString(n.Title)
+	if len(n.Authors) > 0 {
+		body.WriteString("\n\n")
+		for i, a := range n.Authors {
+			if i > 0 {
+				body.WriteString("\n")
+			}
+			body.WriteString("- ")
+			body.WriteString(a)
+		}
+	}
+	if n.Year != "" {
+		body.WriteString("\n\n(")
+		body.WriteString(n.Year)
+		body.WriteString(")")
+	}
+	content := body.String()
+	fence := mdxFence(content)
+
+	lang := r.lang
+	if n.Lang != "" {
+		lang = n.Lang
+	}
+	script := r.script
+	if n.Script != "" {
+		script = n.Script
+	}
+	io.WriteString(w, fence)
+	io.WriteString(w, "section lang=")
 	io.WriteString(w, lang)
 	io.WriteString(w, " script=")
 	io.WriteString(w, script)
