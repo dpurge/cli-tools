@@ -2,6 +2,8 @@ package ebook
 
 import (
 	"fmt"
+	"net/url"
+	"os"
 	"path/filepath"
 
 	"github.com/dpurge/cli-tools/pkg/tool"
@@ -76,8 +78,62 @@ func setCover(book *epub.Epub, cover string, stylesheets EBookStyles) (string, e
 	return coverPath, nil
 }
 
+const epubLayoutCSS = `
+.models-group,
+.vocabulary-group,
+.questions-group {
+  display: table;
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0 0.35em;
+}
+.models-item.paired,
+.vocabulary-item,
+.questions-item {
+  display: table-row;
+}
+.models-col1,
+.models-col2,
+.vocabulary-col1,
+.vocabulary-col2,
+.questions-col1,
+.questions-col2 {
+  display: table-cell;
+  width: 50%;
+  vertical-align: top;
+}
+.models-col1,
+.vocabulary-col1,
+.questions-col1 {
+  padding-right: 0.7em;
+}
+.models-col2,
+.vocabulary-col2,
+.questions-col2 {
+  padding-left: 0.7em;
+}
+.models-phrase,
+.vocabulary-phrase {
+  font-weight: bold;
+}
+.block-header,
+.block-note,
+.section-title,
+.section-authors,
+.section-year {
+  text-align: center;
+}
+`
+
 func addStylesheets(book *epub.Epub, stylesheets EBookStyles) (EBookStyles, error) {
 	var styles EBookStyles
+
+	layoutStyle, err := book.AddCSS("data:text/css,"+url.PathEscape(epubLayoutCSS), "ebook-layout.css")
+	if err != nil {
+		return styles, err
+	}
+	styles.Section = layoutStyle
+	styles.Chapter = layoutStyle
 
 	for i, val := range stylesheets.Common {
 		style, err := book.AddCSS(stylesheets.Common[i], filepath.Base(val))
@@ -96,7 +152,7 @@ func addStylesheets(book *epub.Epub, stylesheets EBookStyles) (EBookStyles, erro
 	}
 
 	if stylesheets.Section != "" {
-		style, err := book.AddCSS(stylesheets.Section, filepath.Base(stylesheets.Section))
+		style, err := addCSSWithLayout(book, stylesheets.Section, "section")
 		if err != nil {
 			return styles, err
 		}
@@ -104,7 +160,7 @@ func addStylesheets(book *epub.Epub, stylesheets EBookStyles) (EBookStyles, erro
 	}
 
 	if stylesheets.Chapter != "" {
-		style, err := book.AddCSS(stylesheets.Chapter, filepath.Base(stylesheets.Chapter))
+		style, err := addCSSWithLayout(book, stylesheets.Chapter, "chapter")
 		if err != nil {
 			return styles, err
 		}
@@ -112,6 +168,15 @@ func addStylesheets(book *epub.Epub, stylesheets EBookStyles) (EBookStyles, erro
 	}
 
 	return styles, nil
+}
+
+func addCSSWithLayout(book *epub.Epub, source, prefix string) (string, error) {
+	b, err := os.ReadFile(source)
+	if err != nil {
+		return "", err
+	}
+	css := epubLayoutCSS + "\n" + string(b)
+	return book.AddCSS("data:text/css,"+url.PathEscape(css), prefix+"-ebook-layout.css")
 }
 
 func addFonts(book *epub.Epub, fontfiles []string) ([]string, error) {

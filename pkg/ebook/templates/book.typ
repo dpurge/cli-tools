@@ -184,7 +184,10 @@
 // FR-5: center all structured-block headers (dialog/vocabulary/models/questions).
 // FR-6 (start-dialog): outlined: false already keeps these out of the TOC;
 // the align() wrapper does not disturb the outlined field (verified by compile).
-#let _blockheading(level, body) = align(center, heading(level: level, outlined: false)[#body])
+// Keep the heading with the immediately following content so a page cannot break
+// directly after a structured-block heading. This intentionally does not apply
+// to section() title pages, whose trailing pagebreak is required.
+#let _blockheading(level, body) = align(center, block(sticky: true, heading(level: level, outlined: false)[#body]))
 #let _blocknote(body) = align(center, context text(font: _roleFonts.get().notes)[#body])
 
 #let textblock(role: "source", dir: ltr, script: "", body) = {
@@ -193,6 +196,7 @@
   // headings inside textblock() emit plain Typst `= ...` syntax, which defaults
   // to outlined: true; this rule overrides that for every heading in this scope.
   show heading: set heading(outlined: false)
+  show heading: set block(sticky: true)
   show heading.where(level: 1): set align(center)
   show heading.where(level: 2): set align(center)
   show heading.where(level: 3): set align(center)
